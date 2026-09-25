@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: samadhan-app
+    env: node
+    buildCommand: "./render-build.sh"
+    startCommand: "cd backend && node server.js"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: REDIS_URI
+        fromService:
+          type: redis
+          name: samadhan-cache
+          property: connectionString
+
+  - type: redis
+    name: samadhan-cache
+    ipAllowList: [] # only allow internal connections
+    plan: free
