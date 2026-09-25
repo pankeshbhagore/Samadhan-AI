@@ -1,153 +1,132 @@
-<div align="center">
-  <h1>🏛️ Samadhan - Agentic AI Grievance Resolution</h1>
-  <p><strong>National Public Grievance Redressal & Autonomous Workforce Management System</strong></p>
-  <p><i>Built to solve PS3: Agentic Decision Support for Complex Public Grievances</i></p>
-</div>
+# 🏛️ Samadhan: AI-Driven Public Grievance Intelligence Dashboard
 
-<br />
+![MERN Stack](https://img.shields.io/badge/Stack-MERN-blue?style=for-the-badge&logo=react)
+![Socket.io](https://img.shields.io/badge/RealTime-Socket.io-black?style=for-the-badge&logo=socket.io)
+![Node.js](https://img.shields.io/badge/Backend-Node.js-green?style=for-the-badge&logo=node.js)
+![MongoDB](https://img.shields.io/badge/Database-MongoDB-darkgreen?style=for-the-badge&logo=mongodb)
 
-**Samadhan** is a highly scalable, secure, and intelligent platform designed to bridge the gap between citizens and government officials. Moving beyond traditional "register and forward" complaint systems, Samadhan utilizes an **Agentic AI Coordinator** to actively analyze, plan, and manage the resolution of complex, multi-departmental public grievances.
+> **"Closing the Loophole in E-Governance through AI, Geo-Fencing, and Citizen Verification"**
 
----
-
-## 📑 Table of Contents
-1. [Hackathon Problem Statement (PS3)](#-hackathon-problem-statement-ps3)
-2. [How the Agentic AI Works](#-how-the-agentic-ai-works)
-3. [Core Architecture & Technologies](#-core-architecture--technologies)
-4. [Hierarchical RBAC Architecture](#-hierarchical-rbac-architecture)
-5. [Key Features](#-key-features)
-6. [Security & Accountability](#-security--accountability)
-7. [Installation & Local Setup](#-installation--local-setup)
+**Samadhan** is a next-generation, intelligent public grievance management system. It acts as a direct bridge between citizens and government departments, leveraging Artificial Intelligence, strict geographic accountability, and real-time tracking to ensure that public complaints are not just recorded, but actively and honestly resolved.
 
 ---
 
-## 🎯 Hackathon Problem Statement (PS3)
-**The Challenge:** Traditional grievance systems fail when a single issue involves multiple departments, incomplete information, or sequential actions (e.g., A storm knocks down a tree onto power lines). 
-
-**The Samadhan Solution:** 
-We built an autonomous **Agentic Decision Support System**. Instead of acting as a simple chatbot or text classifier, the AI acts as a digital project manager. It:
-- **Understands Context:** Reads the grievance and identifies if multiple departments are needed.
-- **Multi-step Planning:** Breaks the grievance down into a sequence of actionable sub-tasks.
-- **Dependency Tracking:** Ensures Task B (removing a tree) doesn't start until Task A (cutting live power) is completed.
-- **Human Escalation:** Autonomously flags and escalates issues to human supervisors if tasks are blocked or information is missing.
+## 🛑 The Problem
+Current e-governance systems suffer from severe critical flaws:
+1. **The "False Closure" Loophole:** Corrupt or lazy officials often mark complaints (like a broken pipe or pothole) as "Resolved" from their desks without ever visiting the site or doing the physical work.
+2. **Opaque Tracking:** Citizens are kept in the dark after submitting a complaint.
+3. **Manual Routing Delays:** Complaints sit in pending queues for days waiting for a human to route them to the correct local department.
+4. **Lack of Accountability:** Higher-ups (Chief Ministers, Admins) lack micro-level data to track which specific officers or contractors are failing their Service Level Agreements (SLAs).
 
 ---
 
-## 🤖 How the Agentic AI Works
+## 💡 The Solution (Key Features)
 
-When a complex complaint is submitted, the system bypasses standard routing and triggers the `agenticCoordinator.js` pipeline:
+### 1. 🛡️ The Ultimate Loophole Closer: Citizen Verification
+A ticket can **never** be officially closed by an officer alone. When an officer marks a job as "Completed", the system emails the Citizen with photographic evidence of the fixed issue. The citizen must manually click **Verify & Accept** on their dashboard. If they click **Reject**, the ticket is instantly reopened, and the officer is penalized.
 
-```mermaid
-sequenceDiagram
-    actor Citizen
-    participant API as Samadhan API
-    participant Agent as OpenAI Agent Coordinator
-    participant Dept1 as Dept 1 (Electricity)
-    participant Dept2 as Dept 2 (Forestry)
+### 2. 📍 Geo-Fencing Accountability
+When an officer attempts to upload a "Proof of Resolution" photo, the application captures their device's GPS coordinates. If the officer is more than **300 meters** away from the exact location of the citizen's original complaint, a "Geo-Fence Violation" is triggered, logging a suspicious audit trail for the Super Admin.
 
-    Citizen->>API: Submits: "Tree fell on live power lines"
-    API->>Agent: Analyze text against all active departments
-    
-    Note over Agent: AI detects multiple hazards.<br/>Generates Multi-Step Plan.
-    
-    Agent-->>API: Returns JSON Plan (Task 1 & Task 2)
-    
-    API->>Dept1: Assigns Sub-Task: Cut Power
-    API->>Dept2: Assigns Sub-Task: Remove Tree (Blocked by Task 1)
-    
-    Dept1->>API: Officer marks "Power Cut" as Done
-    API->>Agent: Coordinates Progress
-    Agent->>Dept2: Unblocks Task 2
-    
-    Dept2->>API: Officer marks "Tree Removed" as Done
-    API->>Citizen: Triggers Citizen Verification
-```
+### 3. 🤖 AI Image Fraud Detection (Perceptual Hashing)
+To prevent an officer from uploading the exact same stock photo of a "fixed pothole" to close 50 different tickets, the backend utilizes **Jimp** to generate a perceptual hash of the uploaded image. It compares this hash against the last 1,000 resolved tickets. Visually identical images instantly trigger an AI Fraud Alert.
+
+### 4. 🧠 Automated AI Department Routing
+The system uses Natural Language Processing to instantly read a citizen's complaint description and automatically route it to the exact correct department (e.g., Water Board, PWD, Electricity) within milliseconds.
+
+### 5. 📊 Automated Real-Time Analytics
+A scheduled CRON service automatically generates weekly, monthly, and yearly performance reports, sending deep analytical insights directly to Department Heads and State Admins.
 
 ---
 
-## 🛠 Core Architecture & Technologies
+## 🛠️ Technology Stack
 
-Samadhan is built on a robust MERN stack, enhanced with AI processing, real-time bidirectional communication, and geospatial tracking.
+### Frontend (Client-Side)
+- **React.js (v18):** Component-based UI rendering.
+- **Context API:** Global state management for authentication and notifications.
+- **CSS3:** Custom, responsive, mobile-first styling (No heavy CSS frameworks required).
 
-- **Frontend:** React 18, React Router DOM, Lucide Icons, Leaflet (Geospatial Mapping).
-- **Backend:** Node.js, Express.js.
-- **Database:** MongoDB & Mongoose (utilizing `2dsphere` indexes for geographic coordinate querying).
-- **Real-Time Engine:** Socket.io (for instant grievance alerts and auto-updating UI).
-- **AI Engine:** OpenAI `gpt-4o` for Agentic Task Planning and Sentiment Analysis.
-- **Security:** JWT Authentication, bcrypt, express-rate-limit, Role-Based Access Control (RBAC).
+### Backend (Server-Side)
+- **Node.js & Express.js:** RESTful API architecture.
+- **Socket.io:** WebSockets for instant, real-time event streaming and notifications.
+- **Jimp:** Image processing and perceptual hashing for fraud detection.
+- **Nodemailer:** Automated HTML email timelines and citizen verification loops.
+- **node-cron:** Scheduled task execution for analytics reporting.
 
----
-
-## 👑 Hierarchical RBAC Architecture
-
-Samadhan enforces strict data-partitioning and mutation boundaries based on roles. A major feature of the Agentic AI integration is that officers can securely interact with specific *sub-tasks* belonging to their department, without gaining unauthorized access to the rest of the system.
-
-- **Super Admin (National):** Macro-view of the entire nation.
-- **State Admin / Chief Minister (CM):** Oversees Departments, Employees, and Citizens within their registered state.
-- **Department Head:** Manages Employees and analytics specifically within their department (e.g., Water Board).
-- **Employee / Officer:** The boots-on-the-ground worker. Can claim and execute AI-assigned sub-tasks.
-- **Citizen:** Submits grievances and acts as the ultimate verifier of resolution.
+### Database
+- **MongoDB:** NoSQL document database.
+- **Mongoose:** Object Data Modeling (ODM) library.
 
 ---
 
-## ✨ Key Features
+## 🚀 System Architecture Flow
 
-### 📍 Geospatial Mapping & Geo-Fence Tracking
-Citizens drop pins on a live map to report issues. When an officer attempts to mark a complaint as "Resolved," the system triggers a **Geo-Fence check**. If the officer is more than 300 meters away from the actual incident location, the system throws a "Geo-Fence Violation" alert to prevent fraudulent closures.
-
-### 🛑 Anti-False Closure & Citizen Verification
-The lifecycle of a complaint guarantees accountability. When all Agentic sub-tasks are completed, the system does **not** close the ticket. It moves to a `pending_verification` state. The citizen receives an alert and must physically confirm the real-world issue is resolved. If they reject it, the system logs a "False Closure" against the officer and escalates the ticket.
-
-### 🧠 Auto-Assignment via Workload Balancing
-The backend actively tracks how many active complaints an officer has versus their maximum bandwidth. When a new sub-task is created by the AI, the first available employee in the relevant department who clicks "Start" is securely assigned ownership of that task.
+1. **Submission:** Citizen submits a complaint with GPS location and photos.
+2. **AI Triage:** System instantly assigns the ticket to the relevant local officer.
+3. **Execution:** Officer receives the ticket, travels to the site, performs the work, and uploads "Proof Images" via the portal.
+4. **Fraud Check:** Backend validates GPS proximity and AI checks for image duplicates. 
+5. **Citizen Verification:** An email containing the proof photos is sent to the citizen. The ticket is placed in "Pending Verification".
+6. **Finality:** The citizen reviews the photos. If they click "Reject", the officer is penalized and the ticket reopens. If "Accept", the ticket is officially closed.
 
 ---
 
-## 🔒 Security & Accountability
+## ⚙️ Installation & Setup
 
-Given the sensitive nature of government data, Samadhan employs strict architectural guardrails:
+### Prerequisites
+- Node.js (v16 or higher)
+- MongoDB (Local instance or MongoDB Atlas)
+- Gmail Account (for Nodemailer SMTP)
 
-1. **Sub-Task Level Authorization:** The API actively intercepts cross-department task modification. An employee in the Water Department is cryptographically blocked from clicking "Done" on an Electricity Department sub-task.
-2. **Immutable Audit Logging:** Every verified action, AI plan generation, and false-closure detection creates an immutable record in the `AuditLog` collection.
-3. **Graceful AI Degradation:** If the Agentic AI encounters a catastrophic failure or API timeout, the backend gracefully falls back to standard single-department routing, ensuring citizens can always submit emergencies.
-
----
-
-## 🚀 Installation & Local Setup
-
-### 1. Prerequisites
-- **Node.js** (v18.x or higher)
-- **MongoDB** (Local instance running on `localhost:27017` or Atlas URI)
-- **OpenAI API Key** (Required for the Agentic Coordinator)
+### 1. Clone the Repository
+\`\`\`bash
+git clone https://github.com/your-username/samadhan-ai.git
+cd samadhan-ai
+\`\`\`
 
 ### 2. Backend Setup
-Navigate to the backend directory, install dependencies, and configure your environment.
-```bash
+\`\`\`bash
 cd backend
 npm install
-
-# Create environment configuration
-echo "PORT=5000" > .env
-echo "MONGO_URI=mongodb://localhost:27017/samadhan" >> .env
-echo "JWT_SECRET=your_super_secret_jwt_key" >> .env
-echo "OPENAI_API_KEY=sk-your-openai-api-key" >> .env
-
-# Start the Express server
+\`\`\`
+Create a \`.env\` file in the \`backend\` directory:
+\`\`\`env
+PORT=5000
+MONGO_URI=mongodb://127.0.0.1:27017/samadhan
+JWT_SECRET=your_super_secret_jwt_key
+SMTP_USER=your_email@gmail.com
+SMTP_PASS=your_gmail_app_password
+CLIENT_URL=http://localhost:3000
+API_URL=http://localhost:5000
+\`\`\`
+Run the backend:
+\`\`\`bash
 npm run dev
-```
+\`\`\`
 
 ### 3. Frontend Setup
-Open a new terminal, navigate to the frontend directory, install dependencies, and start the React app.
-```bash
+Open a new terminal window:
+\`\`\`bash
 cd frontend
 npm install
-
-# Start the React development server
+\`\`\`
+Create a \`.env\` file in the \`frontend\` directory:
+\`\`\`env
+REACT_APP_API_URL=http://localhost:5000/api
+REACT_APP_SOCKET_URL=http://localhost:5000
+\`\`\`
+Run the frontend:
+\`\`\`bash
 npm start
-```
-The application will spin up at `http://localhost:3000`.
+\`\`\`
 
 ---
-<div align="center">
-  <i>Built to modernize and secure public grievance redressal infrastructure.</i>
-</div>
+
+## 🔮 Future Scope
+- **WhatsApp Bot Integration:** Allow citizens to submit and verify complaints entirely through WhatsApp to increase rural accessibility.
+- **Predictive Infrastructure Maintenance:** Use AI to analyze clusters of complaints to predict where a pipeline might burst *before* it happens.
+- **Multilingual Voice Analysis:** Allow citizens to call a toll-free number, with AI instantly transcribing regional languages into actionable text tickets.
+
+---
+
+## 📄 License
+This project is licensed under the MIT License. Developed for Hack Indore.
