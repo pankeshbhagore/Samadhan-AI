@@ -32,17 +32,39 @@ const sendComplaintCreatedEmail = async (citizenEmail, ticketId, title) => {
   if (!citizenEmail) return;
   const trackingUrl = `${process.env.CLIENT_URL || 'http://localhost:3000'}/track/${ticketId}`;
   
-  const subject = `Complaint Submitted: ${ticketId}`;
+  const subject = `Complaint Registered: ${ticketId}`;
   const html = `
-    <div style="font-family: Arial, sans-serif; padding: 20px;">
-      <h2 style="color: #2563eb;">Samadhan Grievance Tracker</h2>
-      <p>Hello,</p>
-      <p>Your complaint <strong>"${title}"</strong> has been successfully submitted.</p>
-      <p>Your Ticket ID is: <strong>${ticketId}</strong></p>
-      <p>You can track the real-time progress of your complaint here:</p>
-      <a href="${trackingUrl}" style="display: inline-block; padding: 10px 20px; color: white; background: #2563eb; text-decoration: none; border-radius: 5px;">Track Complaint</a>
-      <br/><br/>
-      <p>Thank you,<br/>Team Samadhan</p>
+    <div style="max-width: 600px; margin: 0 auto; font-family: 'Segoe UI', Arial, sans-serif; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; background-color: #ffffff;">
+      <div style="background-color: #4f46e5; padding: 24px; text-align: center;">
+        <h2 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;">Samadhan AI</h2>
+        <p style="color: #e0e7ff; margin: 8px 0 0 0; font-size: 14px;">Public Grievance Resolution Portal</p>
+      </div>
+      
+      <div style="padding: 32px; color: #374151;">
+        <p style="font-size: 16px; margin-bottom: 24px;">Dear Citizen,</p>
+        <p style="font-size: 16px; line-height: 1.5; margin-bottom: 24px;">
+          Your complaint has been successfully registered with our system. Our Agentic AI is currently analyzing the issue and will route it to the appropriate department(s).
+        </p>
+        
+        <div style="background-color: #f3f4f6; border-left: 4px solid #4f46e5; padding: 16px; border-radius: 4px; margin-bottom: 32px;">
+          <p style="margin: 0 0 8px 0; font-size: 14px; color: #6b7280;">Complaint Details:</p>
+          <p style="margin: 0 0 8px 0; font-size: 16px;"><strong>Title:</strong> ${title}</p>
+          <p style="margin: 0; font-size: 16px;"><strong>Ticket ID:</strong> <span style="font-family: monospace; background: #e5e7eb; padding: 2px 6px; border-radius: 4px;">${ticketId}</span></p>
+        </div>
+        
+        <p style="font-size: 16px; margin-bottom: 24px;">You can track the real-time progress and AI resolution plan of your complaint here:</p>
+        
+        <div style="text-align: center; margin-bottom: 32px;">
+          <a href="${trackingUrl}" style="display: inline-block; padding: 14px 28px; color: #ffffff; background-color: #4f46e5; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">Track My Complaint</a>
+        </div>
+        
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;" />
+        
+        <p style="font-size: 14px; color: #6b7280; margin: 0; text-align: center;">
+          Thank you for helping us keep the state safe and clean.<br/>
+          <strong>Team Samadhan</strong>
+        </p>
+      </div>
     </div>
   `;
   
@@ -199,8 +221,40 @@ const sendComplaintUpdatedEmail = async (citizenEmail, ticketId, status, message
   await sendEmail(citizenEmail, subject, html);
 };
 
+const sendOfficerAssignedEmail = async (officerEmail, officerName, ticketId, taskDescription) => {
+  if (!officerEmail) return;
+  const loginUrl = `${process.env.CLIENT_URL || 'http://localhost:3000'}/login`;
+  
+  const subject = `New Task Assigned: ${ticketId}`;
+  const html = `
+    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+      <div style="background-color: #f59e0b; padding: 20px; text-align: center;">
+        <h2 style="color: #ffffff; margin: 0;">Task Assignment</h2>
+      </div>
+      <div style="padding: 30px; color: #374151;">
+        <p>Dear <strong>${officerName}</strong>,</p>
+        <p>You have been auto-assigned a new task by the Samadhan AI Agentic system for the resolution of <strong>${ticketId}</strong>.</p>
+        
+        <div style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 4px;">
+          <p style="margin: 0; font-size: 14px; color: #92400e;"><strong>Task Description:</strong></p>
+          <p style="margin: 8px 0 0 0; font-size: 15px;">${taskDescription}</p>
+        </div>
+        
+        <p>Please log in to your dashboard to begin working on this task.</p>
+        
+        <div style="text-align: center; margin-top: 30px;">
+          <a href="${loginUrl}" style="display: inline-block; padding: 12px 24px; color: #ffffff; background-color: #f59e0b; text-decoration: none; border-radius: 6px; font-weight: bold;">Go to Dashboard</a>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  await sendEmail(officerEmail, subject, html);
+};
+
 module.exports = {
   sendEmail,
   sendComplaintCreatedEmail,
-  sendComplaintUpdatedEmail
+  sendComplaintUpdatedEmail,
+  sendOfficerAssignedEmail
 };

@@ -41,7 +41,12 @@ export const updateComplaintStatus = (id, data) => {
   }
   return API.put(`/complaints/${id}/status`, data);
 };
-export const updateSubTaskStatus = (id, data) => API.put(`/complaints/${id}/subtasks`, data);
+export const updateSubTaskStatus = (id, data) => {
+  if (data instanceof FormData) {
+    return API.put(`/complaints/${id}/subtasks`, data, { headers: { 'Content-Type': 'multipart/form-data' } });
+  }
+  return API.put(`/complaints/${id}/subtasks`, data);
+};
 export const citizenVerify = (id, data) => API.post(`/complaints/${id}/verify`, data);
 export const upvoteComplaint = (id) => API.post(`/complaints/${id}/upvote`);
 export const getNearbyComplaints = (params) => API.get('/complaints/nearby', { params });

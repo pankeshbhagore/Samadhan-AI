@@ -1,4 +1,5 @@
 require('dotenv').config();
+require('./utils/telemetry'); // Initialize OpenTelemetry for Agentic AI Circuit Breaker
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -163,3 +164,5 @@ process.on('unhandledRejection', (err) => {
 });
 
 module.exports = app;
+
+// Trigger nodemon restart

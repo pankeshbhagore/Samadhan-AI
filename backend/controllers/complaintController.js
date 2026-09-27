@@ -11,6 +11,7 @@ const { notify, notifyMany } = require('../services/notificationService');
 const { sendComplaintCreatedEmail, sendComplaintUpdatedEmail } = require('../services/emailService');
 const { AppError, asyncHandler } = require('../middleware/errorHandler');
 const { getStateFilter } = require('../middleware/stateFilter');
+const { triggerViaSocketWorkflow } = require('../utils/viasocket');
 
 // ---- Submit new complaint ----
 exports.submitComplaint = asyncHandler(async (req, res) => {
@@ -47,7 +48,7 @@ exports.submitComplaint = asyncHandler(async (req, res) => {
   const dueHours = calculateSLA(ai.category, ai.priority);
   const dueDate = new Date(Date.now() + dueHours * 60 * 60 * 1000);
 
-  const complaint = await Complaint.create({
+  let complaint = await Complaint.create({
     title, description, address, ward, district, pincode, landmark,
     state: userState,
     location,
@@ -70,6 +71,15 @@ exports.submitComplaint = asyncHandler(async (req, res) => {
     sentimentLabel: ai.sentiment?.label,
     estimatedResolutionHours: ai.estimatedResolutionHours?.estimatedHours,
     timeline: [{ status: 'submitted', message: 'Complaint submitted successfully', updatedBy: req.user._id }]
+  });
+
+  // viaSocket Webhook: Notify that a new complaint was created
+  triggerViaSocketWorkflow('COMPLAINT_CREATED', {
+    ticketId: complaint.ticketId,
+    title: complaint.title,
+    category: complaint.category,
+    priority: complaint.priority,
+    isCritical: complaint.isCritical
   });
 
   // Background MCD311 sync — never blocks the response
@@ -145,6 +155,8 @@ exports.submitComplaint = asyncHandler(async (req, res) => {
 
   // Run Agentic AI Coordination Analysis
   const agenticResult = await analyzeComplaintAgentically(complaint._id);
+  // Re-fetch to avoid overwriting agenticPlan saved by the coordinator
+  const freshComplaint = await Complaint.findById(complaint._id);
   if (agenticResult && agenticResult.isComplex) {
     if (agenticResult.humanInterventionRequired) {
       const officials = await User.find({ role: { $in: ['cm', 'super_admin'] }, isActive: true, $or: [{ state: null }, { state: userState }] }).select('_id');
@@ -155,8 +167,44 @@ exports.submitComplaint = asyncHandler(async (req, res) => {
         complaintId: agenticResult._id
       });
     } else {
-      complaint.timeline.push({ status: 'in_progress', message: 'Agentic AI generated a multi-department resolution plan.', isAutomatic: true, updatedBy: null });
-      await complaint.save();
+      freshComplaint.timeline.push({ status: 'in_progress', message: 'Agentic AI generated a multi-department resolution plan.', isAutomatic: true, updatedBy: null });
+      await freshComplaint.save();
+    }
+    // Use freshComplaint for all subsequent operations
+    complaint = freshComplaint;
+
+    // --- Notify ALL department officers & heads involved in the agentic plan ---
+    const involvedDeptIds = [...new Set(
+      (complaint.agenticPlan || [])
+        .map(t => t.department?.toString())
+        .filter(Boolean)
+    )];
+    
+    if (involvedDeptIds.length > 0) {
+      // Find department heads and employees in ALL involved departments
+      const deptStaff = await User.find({
+        department: { $in: involvedDeptIds },
+        role: { $in: ['employee', 'department_head'] },
+        isActive: true,
+        state: userState
+      }).select('_id role department');
+
+      // Send personalized notification to each staff member
+      for (const staff of deptStaff) {
+        // Find which task(s) belong to this staff's department
+        const theirTasks = complaint.agenticPlan.filter(
+          t => t.department?.toString() === staff.department?.toString()
+        );
+        const taskDescriptions = theirTasks.map(t => t.taskDescription).join('; ');
+
+        await notify(req.io, {
+          recipientId: staff._id,
+          type: 'agentic_task_assigned',
+          title: '🤖 New Agentic AI Task For Your Department',
+          message: `${complaint.ticketId}: ${taskDescriptions}`,
+          complaintId: complaint._id
+        });
+      }
     }
   }
 
@@ -270,9 +318,25 @@ exports.getComplaint = asyncHandler(async (req, res) => {
   const isPrivileged = ['cm', 'super_admin', 'department_head'].includes(req.user.role);
 
   if (req.user.role === 'citizen' && !isOwner) throw new AppError('Not authorized to view this complaint', 403);
-  if (req.user.role === 'employee' && !isAssignee) throw new AppError('Not authorized to view this complaint', 403);
-  if (req.user.role === 'department_head' && complaint.department?._id?.toString() !== req.user.department?._id?.toString()) {
-    throw new AppError('Not authorized to view this complaint', 403);
+  
+  if (req.user.role === 'employee' && !isAssignee) {
+    const empDept = req.user.department?._id?.toString() || req.user.department?.toString();
+    const hasDeptSubTask = complaint.agenticPlan?.some(
+      t => (t.department?._id?.toString() || t.department?.toString()) === empDept
+    );
+    const hasAssignedSubTask = complaint.agenticPlan?.some(
+      t => (t.assignedTo?._id?.toString() || t.assignedTo?.toString()) === req.user._id.toString()
+    );
+    if (!hasDeptSubTask && !hasAssignedSubTask) throw new AppError('Not authorized to view this complaint', 403);
+  }
+  
+  if (req.user.role === 'department_head') {
+    const headDept = req.user.department?._id?.toString() || req.user.department?.toString();
+    const isPrimaryDept = complaint.department?._id?.toString() === headDept;
+    const hasSubTask = complaint.agenticPlan?.some(
+      t => (t.department?._id?.toString() || t.department?.toString()) === headDept
+    );
+    if (!isPrimaryDept && !hasSubTask) throw new AppError('Not authorized to view this complaint', 403);
   }
 
   res.json({ success: true, complaint });
@@ -809,7 +873,7 @@ exports.exportComplaintsCSV = asyncHandler(async (req, res) => {
 
 // ---- Update Agentic Sub-Task Status ----
 exports.updateSubTaskStatus = asyncHandler(async (req, res) => {
-  const { taskId, status, assignedTo } = req.body;
+  const { taskId, status, assignedTo, blockReason } = req.body;
   const complaint = await Complaint.findById(req.params.id);
 
   if (!complaint) throw new AppError('Complaint not found', 404);
@@ -823,13 +887,17 @@ exports.updateSubTaskStatus = asyncHandler(async (req, res) => {
   // --- RBAC Authorization Checks ---
   const isSuperAdmin = req.user.role === 'super_admin';
   const isCM = req.user.role === 'cm' && (!req.user.state || req.user.state === complaint.state);
+  
+  // Normalize department IDs for comparison (handles both populated objects and raw ObjectIds)
+  const userDept = (req.user.department?._id || req.user.department)?.toString();
+  const taskDept = (task.department?._id || task.department)?.toString();
+  
   const isDeptHead = req.user.role === 'department_head' && 
-                     req.user.department?.toString() === task.department?.toString() &&
+                     userDept === taskDept &&
                      (!req.user.state || req.user.state === complaint.state);
                      
   // Employees can only update if they are in the department responsible for this specific sub-task
-  const isEmployeeInDept = req.user.role === 'employee' && 
-                           req.user.department?.toString() === task.department?.toString();
+  const isEmployeeInDept = req.user.role === 'employee' && userDept === taskDept;
 
   if (!isSuperAdmin && !isCM && !isDeptHead && !isEmployeeInDept) {
     throw new AppError('You are not authorized to update this specific department\'s sub-task.', 403);
@@ -837,8 +905,20 @@ exports.updateSubTaskStatus = asyncHandler(async (req, res) => {
   // ---------------------------------
 
   if (status) {
+    if (status === 'in_progress' && task.dependency) {
+      const depTask = complaint.agenticPlan.find(t => t.taskId === task.dependency);
+      if (depTask && depTask.status !== 'completed') {
+        throw new AppError(`Cannot start this task yet. It depends on ${task.dependency} which is not completed.`, 400);
+      }
+    }
+
     task.status = status;
     if (status === 'completed') {
+      const images = req.files ? req.files.map(f => `/uploads/complaints/${f.filename}`) : [];
+      if (images.length === 0) {
+        throw new AppError('Proof of work (images) is required to mark a sub-task as completed', 400);
+      }
+      task.resolutionImages = images;
       task.completedAt = new Date();
     }
     
@@ -852,15 +932,31 @@ exports.updateSubTaskStatus = asyncHandler(async (req, res) => {
     task.assignedTo = assignedTo;
   }
 
+  if (status === 'blocked' && blockReason) {
+    task.blockReason = blockReason;
+    // viaSocket Webhook: Notify that an agentic task is blocked
+    triggerViaSocketWorkflow('ESCALATION_ALERT', {
+      ticketId: complaint.ticketId,
+      taskId,
+      blockReason
+    });
+  }
+
   await complaint.save();
 
   // Call the coordinator to check if next tasks need unblocking, or if the whole thing is done
-  const { trackAndCoordinateProgress } = require('../services/agenticCoordinator');
-  await trackAndCoordinateProgress(complaint._id);
+  const { trackAndCoordinateProgress, replanComplaintAgentically } = require('../services/agenticCoordinator');
+  if (status === 'blocked') {
+    await replanComplaintAgentically(complaint._id, taskId, blockReason || "No reason provided");
+  } else {
+    await trackAndCoordinateProgress(complaint._id);
+  }
 
   const updatedComplaint = await Complaint.findById(complaint._id)
     .populate('agenticPlan.department', 'name')
     .populate('agenticPlan.assignedTo', 'name');
+
+  req.io?.emit('complaint_updated', { ticketId: updatedComplaint.ticketId, status: updatedComplaint.status });
 
   res.json({ success: true, complaint: updatedComplaint, message: 'Sub-task updated successfully' });
 });

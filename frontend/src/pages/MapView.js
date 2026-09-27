@@ -125,6 +125,11 @@ export default function MapView() {
       return div;
     };
     legend.addTo(leafletMap.current);
+
+    // Force map to resize after rendering, fixing the gray tile issue
+    setTimeout(() => {
+      if (leafletMap.current) leafletMap.current.invalidateSize();
+    }, 500);
   }, [leafletReady, loading]);
 
   // Swap tile layer whenever the chosen map theme changes

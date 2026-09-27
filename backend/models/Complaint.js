@@ -115,6 +115,8 @@ const complaintSchema = new mongoose.Schema({
     status: { type: String, enum: ['pending', 'in_progress', 'completed', 'blocked'], default: 'pending' },
     assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     dependency: { type: String }, // taskId of the task this depends on
+    blockReason: { type: String },
+    resolutionImages: [{ type: String }],
     completedAt: Date
   }]
 }, { timestamps: true });

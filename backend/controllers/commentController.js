@@ -10,8 +10,22 @@ function checkComplaintAccess(req, complaint) {
   const role = req.user.role;
   if (role === 'cm' || role === 'super_admin') return true;
   if (role === 'citizen') return complaint.citizen.toString() === req.user._id.toString();
-  if (role === 'employee') return complaint.assignedTo?.toString() === req.user._id.toString();
-  if (role === 'department_head') return complaint.department?.toString() === req.user.department?._id?.toString();
+  
+  if (role === 'employee') {
+    if ((complaint.assignedTo?._id?.toString() || complaint.assignedTo?.toString()) === req.user._id.toString()) return true;
+    const empDept = req.user.department?._id?.toString() || req.user.department?.toString();
+    const hasDeptSubTask = complaint.agenticPlan?.some(t => (t.department?._id?.toString() || t.department?.toString()) === empDept);
+    const hasAssignedSubTask = complaint.agenticPlan?.some(t => (t.assignedTo?._id?.toString() || t.assignedTo?.toString()) === req.user._id.toString());
+    if (hasDeptSubTask || hasAssignedSubTask) return true;
+  }
+  
+  if (role === 'department_head') {
+    const headDept = req.user.department?._id?.toString() || req.user.department?.toString();
+    if ((complaint.department?._id?.toString() || complaint.department?.toString()) === headDept) return true;
+    const hasSubTask = complaint.agenticPlan?.some(t => (t.department?._id?.toString() || t.department?.toString()) === headDept);
+    if (hasSubTask) return true;
+  }
+  
   return false;
 }
 

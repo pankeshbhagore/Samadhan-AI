@@ -85,6 +85,10 @@ export default function Dashboard() {
           ))}
         </div>
       </div>
+
+      <div style={{ marginTop: 24, textAlign: 'center', fontSize: 12, color: 'var(--text-muted)' }}>
+        ⚡ Automated Notifications Powered by <a href="https://viasocket.com" target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>viaSocket</a>
+      </div>
     </div>
   );
 }

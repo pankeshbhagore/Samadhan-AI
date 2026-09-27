@@ -26,13 +26,16 @@ exports.getStateFilter = (user) => {
     ];
   }
 
-  // Officers are restricted to their assigned complaints within their state
-  // They can see complaints where they are the primary assignee OR assigned a sub-task
+  // Officers can see complaints assigned to them, OR where their DEPARTMENT has an agentic sub-task
   if (user.role === 'employee') {
+    const deptId = user.department?._id || user.department;
     filter.$or = [
       { assignedTo: user._id },
       { 'agenticPlan.assignedTo': user._id }
     ];
+    if (deptId) {
+      filter.$or.push({ 'agenticPlan.department': deptId });
+    }
   }
 
   // Citizens are restricted to their own complaints

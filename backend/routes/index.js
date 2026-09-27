@@ -78,7 +78,7 @@ router.put('/complaints/:id/remind', protect, authorize('cm', 'super_admin'), mo
 router.put('/complaints/:id/status', protect, authorize('employee', 'department_head', 'super_admin'), mongoIdParam(), upload.array('images', 5), statusUpdateRules, validate, complaintCtrl.updateStatus);
 router.post('/complaints/:id/verify', protect, authorize('citizen'), mongoIdParam(), verifyRules, validate, complaintCtrl.citizenVerify);
 router.post('/complaints/:id/upvote', protect, mongoIdParam(), validate, complaintCtrl.upvoteComplaint);
-router.put('/complaints/:id/subtasks', protect, authorize('employee', 'department_head', 'super_admin', 'cm'), mongoIdParam(), validate, complaintCtrl.updateSubTaskStatus);
+router.put('/complaints/:id/subtasks', protect, authorize('employee', 'department_head', 'super_admin', 'cm'), mongoIdParam(), upload.array('images', 5), validate, complaintCtrl.updateSubTaskStatus);
 
 // ---------- Comments ----------
 router.get('/complaints/:id/comments', protect, mongoIdParam(), validate, commentCtrl.getComments);

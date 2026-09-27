@@ -30,6 +30,10 @@ export default function ComplaintDetail() {
   const [rating, setRating] = useState(0);
   const [proofImages, setProofImages] = useState(null);
 
+  const [showSubtaskDone, setShowSubtaskDone] = useState(false);
+  const [subtaskDoneId, setSubtaskDoneId] = useState(null);
+  const [subtaskProofImages, setSubtaskProofImages] = useState(null);
+
   useEffect(() => {
     let cancelled = false;
     getComplaint(id).then(({ data }) => {
@@ -171,10 +175,46 @@ export default function ComplaintDetail() {
   };
 
   const handleSubTaskUpdate = async (taskId, newStatus) => {
+    if (newStatus === 'completed') {
+      setSubtaskDoneId(taskId);
+      setShowSubtaskDone(true);
+      return;
+    }
+    let blockReason = undefined;
+    if (newStatus === 'blocked') {
+      blockReason = window.prompt("Please provide a reason why this task is blocked. The AI will attempt to replan based on your reason:");
+      if (!blockReason) {
+        toast.error("A reason is required to block a task.");
+        return;
+      }
+    }
+
     setActionLoading(true);
     try {
-      await updateSubTaskStatus(id, { taskId, status: newStatus });
-      toast.success('Task status updated');
+      await updateSubTaskStatus(id, { taskId, status: newStatus, blockReason });
+      toast.success(newStatus === 'blocked' ? 'Task blocked. AI is evaluating the situation.' : 'Task status updated');
+      refreshComplaint();
+    } catch(err) {
+      toast.error(getErrorMessage(err, 'Task update failed'));
+    } finally { setActionLoading(false); }
+  };
+
+  const submitSubtaskDone = async () => {
+    if (!subtaskProofImages || subtaskProofImages.length === 0) {
+      return toast.error('Proof of work (images) is required to mark the task as done.');
+    }
+    setActionLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('taskId', subtaskDoneId);
+      formData.append('status', 'completed');
+      Array.from(subtaskProofImages).forEach(f => formData.append('images', f));
+
+      await updateSubTaskStatus(id, formData);
+      toast.success('Task marked as completed with proof.');
+      setShowSubtaskDone(false);
+      setSubtaskDoneId(null);
+      setSubtaskProofImages(null);
       refreshComplaint();
     } catch(err) {
       toast.error(getErrorMessage(err, 'Task update failed'));
@@ -193,11 +233,11 @@ export default function ComplaintDetail() {
 
   const getValidNextStatuses = (current) => {
     const flow = {
-      assigned: ['under_review', 'in_progress', 'rejected'],
-      under_review: ['in_progress', 'escalated', 'rejected'],
+      assigned: ['in_progress', 'rejected'],
+      under_review: ['in_progress', 'escalated', 'rejected'], // Backward compatibility
       in_progress: ['pending_verification', 'escalated'],
-      reopened: ['under_review', 'in_progress', 'escalated', 'rejected'],
-      escalated: ['under_review', 'in_progress']
+      reopened: ['in_progress', 'escalated', 'rejected'],
+      escalated: ['in_progress']
     };
     return flow[current] || [];
   };
@@ -210,18 +250,16 @@ export default function ComplaintDetail() {
     const steps = [
       { id: 'submitted', label: 'Submitted' },
       { id: 'assigned', label: 'Assigned' },
-      { id: 'under_review', label: 'Under Review' },
       { id: 'in_progress', label: 'In Progress' },
       { id: 'pending_verification', label: 'Verification' },
       { id: 'resolved', label: 'Resolved' }
     ];
 
     const getResolvedIdx = (status) => {
-      if (status === 'resolved') return 5;
-      if (status === 'pending_verification') return 4;
-      if (status === 'in_progress') return 3;
-      if (status === 'under_review' || status === 'reopened' || status === 'escalated') return 2;
-      if (status === 'assigned') return 1;
+      if (status === 'resolved') return 4;
+      if (status === 'pending_verification') return 3;
+      if (status === 'in_progress' || status === 'escalated') return 2;
+      if (status === 'assigned' || status === 'under_review' || status === 'reopened') return 1;
       return 0; // submitted
     };
     const resolvedIdx = getResolvedIdx(complaint.status);
@@ -230,8 +268,8 @@ export default function ComplaintDetail() {
       <div className="card" style={{ marginBottom: 20, overflow: 'hidden' }}>
         <div className="card-body" style={{ background: 'var(--bg)', padding: '24px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
-            <div style={{ position: 'absolute', top: 14, left: 20, right: 20, height: 2, background: '#e2e8f0', zIndex: 1 }} />
-            <div style={{ position: 'absolute', top: 14, left: 20, width: resolvedIdx >= 0 ? `${(Math.max(0, resolvedIdx) / 5) * 100}%` : '0%', height: 2, background: '#10b981', zIndex: 1, transition: 'width 0.4s ease' }} />
+            <div style={{ position: 'absolute', top: 14, left: 40, right: 40, height: 2, background: '#e2e8f0', zIndex: 1 }} />
+            <div style={{ position: 'absolute', top: 14, left: 40, width: resolvedIdx >= 0 ? `calc(${(Math.max(0, resolvedIdx) / 4)} * (100% - 80px))` : '0%', height: 2, background: '#10b981', zIndex: 1, transition: 'width 0.4s ease' }} />
             
             {steps.map((step, idx) => {
               const isPast = idx < resolvedIdx || complaint.status === 'resolved';
@@ -258,8 +296,7 @@ export default function ComplaintDetail() {
 
             {canActuallyUpdateStatus && availableStatuses.length > 0 && complaint.status !== 'pending_verification' && (
               <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'center', gap: 12 }}>
-                {(complaint.status === 'assigned' || complaint.status === 'reopened' || complaint.status === 'escalated') && <button className="btn btn-primary" onClick={() => fastUpdateStatus('under_review')} disabled={actionLoading}>Start Review &rarr;</button>}
-                {(complaint.status === 'under_review' || complaint.status === 'reopened' || complaint.status === 'escalated') && <button className="btn btn-primary" onClick={() => fastUpdateStatus('in_progress')} disabled={actionLoading}>Begin Work &rarr;</button>}
+                {(complaint.status === 'assigned' || complaint.status === 'under_review' || complaint.status === 'reopened' || complaint.status === 'escalated') && <button className="btn btn-primary" onClick={() => fastUpdateStatus('in_progress')} disabled={actionLoading}>Begin Work &rarr;</button>}
                 {complaint.status === 'in_progress' && <button className="btn btn-success" onClick={() => { setNewStatus('pending_verification'); setShowStatus(true); }} disabled={actionLoading}>Request Citizen Verification ✅</button>}
               </div>
             )}
@@ -284,6 +321,7 @@ export default function ComplaintDetail() {
                 <span className={`badge badge-${complaint.status}`}>{formatStatus(complaint.status)}</span>
                 <span className="badge" style={{ background: ps.bg, color: ps.color }}>{complaint.isCritical && '🚨 '}{complaint.priority?.toUpperCase()}</span>
                 {complaint.isDuplicate && <span className="badge" style={{ background: '#fef3c7', color: '#92400e' }}>Duplicate</span>}
+                {complaint.isComplex && <span className="badge" style={{ background: '#ede9fe', color: '#6d28d9' }}>🤖 Multi-Dept Complex</span>}
               </div>
               
               {complaint.adminReminder && (
@@ -369,7 +407,7 @@ export default function ComplaintDetail() {
                   ['Department', complaint.department?.name || 'Not assigned'],
                   ['Source', complaint.source],
                   ['AI Confidence', complaint.aiConfidence ? `${(complaint.aiConfidence * 100).toFixed(0)}%` : 'N/A'],
-                  complaint.sentimentScore != null && ['Sentiment', `${complaint.sentimentLabel?.replace(/_/g, ' ')} (${(complaint.sentimentScore * 100).toFixed(0)}%)`],
+                  complaint.sentimentScore != null && ['Sentiment', <span className={`sentiment-badge ${complaint.sentimentLabel || 'neutral'}`} style={{ textTransform: 'capitalize' }}>{complaint.sentimentLabel?.replace(/_/g, ' ')} ({(complaint.sentimentScore * 100).toFixed(0)}%)</span>],
                   complaint.estimatedResolutionHours && ['Est. Resolution', `${complaint.estimatedResolutionHours}h`],
                   ['Upvotes', complaint.upvoteCount || 0],
                   ['Submitted', format(new Date(complaint.createdAt), 'dd MMM yyyy HH:mm')],
@@ -401,7 +439,7 @@ export default function ComplaintDetail() {
             </div>
           </div>
 
-          {complaint.assignedTo && (
+          {complaint.assignedTo && !complaint.isComplex && (
             <div className="card">
               <div className="card-header"><div className="card-title">👤 Assigned Officer</div></div>
               <div className="card-body">
@@ -479,7 +517,12 @@ export default function ComplaintDetail() {
             
             <div style={{ display: 'grid', gap: 12 }}>
               {complaint.agenticPlan.map((task, idx) => (
-                <div key={task.taskId} style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: task.status === 'completed' ? '#f0fdf4' : task.status === 'blocked' ? '#fef2f2' : '#fff' }}>
+                <div key={task.taskId} style={{ 
+                  border: task.status === 'in_progress' ? '2px solid #3b82f6' : '1px solid #e2e8f0', 
+                  borderRadius: 8, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+                  background: task.status === 'completed' ? '#f0fdf4' : task.status === 'blocked' ? '#fef2f2' : task.status === 'in_progress' ? '#eff6ff' : '#fff',
+                  boxShadow: task.status === 'in_progress' ? '0 4px 6px -1px rgba(59, 130, 246, 0.2)' : 'none'
+                }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                       <span className={`badge ${task.status === 'completed' ? 'badge-success' : task.status === 'in_progress' ? 'badge-primary' : task.status === 'blocked' ? 'badge-danger' : ''}`}>{task.status.replace('_', ' ').toUpperCase()}</span>
@@ -487,17 +530,67 @@ export default function ComplaintDetail() {
                       {task.dependency && <span style={{ fontSize: 12, color: '#64748b' }}>(Depends on: {task.dependency})</span>}
                     </div>
                     <div style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 4 }}>{task.taskDescription}</div>
-                    {task.assignedTo && <div style={{ fontSize: 12, color: '#4338ca' }}>👤 Claimed by: {task.assignedTo?.name}</div>}
+                    {task.status === 'blocked' && task.blockReason && (
+                      <div style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 4, background: '#fee2e2', padding: '4px 8px', borderRadius: 4, display: 'inline-block' }}>
+                        <strong>Block Reason:</strong> {task.blockReason}
+                      </div>
+                    )}
+                    {task.assignedTo && <div style={{ fontSize: 12, color: '#4338ca', marginTop: 4 }}>👤 Assigned to: {task.assignedTo?.name}</div>}
                   </div>
-                  {(canUpdateStatus || isAdmin() || user?.role === 'department_head') && task.status !== 'completed' && (
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button className="btn btn-sm btn-outline" disabled={actionLoading} onClick={() => handleSubTaskUpdate(task.taskId, 'in_progress')}>Start</button>
-                      <button className="btn btn-sm btn-success" disabled={actionLoading} onClick={() => handleSubTaskUpdate(task.taskId, 'completed')}>Done</button>
-                      <button className="btn btn-sm btn-danger" disabled={actionLoading} onClick={() => handleSubTaskUpdate(task.taskId, 'blocked')}>Block</button>
-                    </div>
-                  )}
+                  {(() => {
+                    const userDeptId = typeof user?.department === 'object' ? user?.department?._id : user?.department;
+                    const taskDeptId = typeof task.department === 'object' ? task.department?._id : task.department;
+                    const hasAccess = isAdmin() || ((user?.role === 'department_head' || isEmployee()) && String(userDeptId) === String(taskDeptId));
+                    
+                    let isDependencyMet = true;
+                    if (task.dependency) {
+                      const depTask = complaint.agenticPlan.find(t => t.taskId === task.dependency);
+                      if (depTask && depTask.status !== 'completed') isDependencyMet = false;
+                    }
+                    
+                    return hasAccess && task.status !== 'completed' && (
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        {task.status !== 'in_progress' && (
+                          <button 
+                            className="btn btn-sm btn-outline" 
+                            disabled={actionLoading || !isDependencyMet} 
+                            onClick={() => handleSubTaskUpdate(task.taskId, 'in_progress')}
+                            title={!isDependencyMet ? `Locked. Waiting for ${task.dependency} to complete.` : ''}
+                          >
+                            ▶ Start
+                          </button>
+                        )}
+                        <button className="btn btn-sm btn-success" disabled={actionLoading || (!isDependencyMet && task.status !== 'in_progress')} onClick={() => handleSubTaskUpdate(task.taskId, 'completed')}>✅ Done</button>
+                        <button className="btn btn-sm btn-danger" disabled={actionLoading} onClick={() => handleSubTaskUpdate(task.taskId, 'blocked')}>🚫 Block</button>
+                      </div>
+                    );
+                  })()}
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSubtaskDone && (
+        <div className="modal-overlay" onClick={() => setShowSubtaskDone(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header"><div className="modal-title">Complete Sub-Task</div><button className="btn btn-icon" onClick={() => setShowSubtaskDone(false)}>✕</button></div>
+            <div className="modal-body">
+              <div className="alert alert-info" style={{ marginBottom: 16 }}>
+                You are about to mark this department task as completed. Please upload photo evidence of the resolution.
+              </div>
+              <div className="form-group">
+                <label className="form-label">Proof of Work (Images) <span style={{ color: 'var(--danger)' }}>*</span></label>
+                <input type="file" multiple accept="image/*" className="form-control" onChange={(e) => setSubtaskProofImages(e.target.files)} />
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Please upload clear images showing the resolved issue.</div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-outline" onClick={() => setShowSubtaskDone(false)}>Cancel</button>
+              <button className="btn btn-success" onClick={submitSubtaskDone} disabled={actionLoading}>
+                {actionLoading ? 'Uploading...' : 'Submit Proof & Complete'}
+              </button>
             </div>
           </div>
         </div>

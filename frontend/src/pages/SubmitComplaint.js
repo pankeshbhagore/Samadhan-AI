@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import useLeaflet from '../hooks/useLeaflet';
+import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { submitComplaint } from '../services/api';
 import { CATEGORY_OPTIONS } from '../utils/helpers';
@@ -26,6 +28,75 @@ export default function SubmitComplaint() {
   const [aiSuggestion, setAiSuggestion] = useState(null);
   const [isCriticalDetected, setIsCriticalDetected] = useState(false);
   const [form, setForm] = useState({ title: '', description: '', category: '', address: '', ward: '', district: '', pincode: '', landmark: '', lat: '', lng: '' });
+  
+  const { user } = useAuth();
+
+  // Pre-fill from User Profile
+  useEffect(() => {
+    if (user) {
+      setForm(f => ({
+        ...f,
+        ward: f.ward || user.ward || '',
+        district: f.district || user.district || '',
+        pincode: f.pincode || user.pincode || ''
+      }));
+    }
+  }, [user]);
+
+  // Reverse Geocoding Auto-fill
+  useEffect(() => {
+    if (!form.lat || !form.lng) return;
+    
+    const timeout = setTimeout(async () => {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${form.lat}&lon=${form.lng}`);
+        const data = await res.json();
+        if (data && data.address) {
+          setForm(f => ({
+            ...f,
+            address: f.address || data.display_name || '',
+            district: f.district || data.address.state_district || data.address.county || data.address.city || '',
+            pincode: f.pincode || data.address.postcode || '',
+            ward: f.ward || data.address.suburb || data.address.neighbourhood || ''
+          }));
+          toast.success("Location details auto-filled!");
+        }
+      } catch (err) {
+        console.error("Reverse geocoding failed", err);
+      }
+    }, 1000);
+
+    return () => clearTimeout(timeout);
+  }, [form.lat, form.lng]);
+
+  const { ready: leafletReady, L } = useLeaflet();
+  const mapRef = useRef(null);
+  const leafletMap = useRef(null);
+  const markerRef = useRef(null);
+
+  useEffect(() => {
+    if (!leafletReady || !mapRef.current || leafletMap.current) return;
+    leafletMap.current = L.map(mapRef.current, { zoomControl: true }).setView([20.5937, 78.9629], 5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(leafletMap.current);
+
+    leafletMap.current.on('click', (e) => {
+      const { lat, lng } = e.latlng;
+      setForm((f) => ({ ...f, lat: lat.toFixed(6), lng: lng.toFixed(6) }));
+    });
+
+    setTimeout(() => {
+      if (leafletMap.current) leafletMap.current.invalidateSize();
+    }, 500);
+  }, [leafletReady, L]);
+
+  useEffect(() => {
+    if (!leafletMap.current || !form.lat || !form.lng) return;
+    if (markerRef.current) markerRef.current.remove();
+    
+    const icon = L.divIcon({ html: `<div style="width:20px;height:20px;border-radius:50%;background:#dc2626;border:3px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3)"></div>`, className: '', iconSize: [20, 20], iconAnchor: [10, 10] });
+    markerRef.current = L.marker([form.lat, form.lng], { icon }).addTo(leafletMap.current);
+    leafletMap.current.setView([form.lat, form.lng], 14);
+  }, [form.lat, form.lng, L]);
 
   useEffect(() => {
     const urls = images.map(img => URL.createObjectURL(img));
@@ -65,7 +136,7 @@ export default function SubmitComplaint() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.title.trim() || !form.description.trim() || !form.category || !form.address.trim()) {
+    if (!form.title.trim() || !form.description.trim() || !form.address.trim()) {
       return toast.error('Please fill all required fields');
     }
     if (form.description.trim().length < 10) return toast.error('Description must be at least 10 characters');
@@ -114,16 +185,11 @@ export default function SubmitComplaint() {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Category <span style={{ color: 'var(--danger)' }}>*</span></label>
-              <select className="form-control" value={form.category} onChange={set('category')}>
-                <option value="">Select category...</option>
-                {CATEGORY_OPTIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-              </select>
-              {aiSuggestion && !form.category && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 12, color: 'var(--primary)', cursor: 'pointer' }} onClick={() => setForm((f) => ({ ...f, category: aiSuggestion }))}>
-                  <Lightbulb size={12} /> AI suggests: <strong>{CATEGORY_OPTIONS.find((c) => c.value === aiSuggestion)?.label}</strong> — click to apply
-                </div>
-              )}
+              <label className="form-label">Category & Routing</label>
+              <div style={{ padding: '12px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, color: '#166534', fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                🤖 <strong style={{ fontWeight: 600 }}>Auto-classified by AI</strong>
+                <span>Your complaint will be intelligently analyzed and routed to the correct department(s).</span>
+              </div>
             </div>
 
             <div className="form-group">
@@ -140,6 +206,14 @@ export default function SubmitComplaint() {
             <button type="button" className="btn btn-outline btn-sm" onClick={handleGeolocate}><MapPin size={12} /> Use My Location</button>
           </div>
           <div className="card-body">
+            <div style={{ marginBottom: 16 }}>
+              <label className="form-label">Pinpoint on Map</label>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>Click on the map to set your exact location, or use the "Use My Location" button above.</div>
+              <div ref={mapRef} style={{ height: 300, borderRadius: 8, border: '1px solid var(--border)', background: '#f8fafc' }}>
+                {!leafletReady && <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)' }}>Loading map...</div>}
+              </div>
+            </div>
+            
             <div className="form-group">
               <label className="form-label">Full Address <span style={{ color: 'var(--danger)' }}>*</span></label>
               <input className="form-control" placeholder="e.g. Near Ram Mandir, Sector 4, Ward 2" value={form.address} onChange={set('address')} />
