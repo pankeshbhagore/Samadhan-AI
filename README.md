@@ -20,9 +20,24 @@ Current e-governance systems suffer from severe critical flaws:
 
 ---
 
-## 💡 The Solution (Key Features)
+## 💡 The Solution & USPs (Key Features)
 
 ### 1. 🛡️ The Ultimate Loophole Closer: Citizen Verification
+
+### 2. 🤖 Agentic AI Multi-Department Coordination
+No more bureaucratic silos. When a citizen reports a complex issue (e.g., fallen tree on power lines), our LLM-powered **Agentic AI** autonomously breaks it down into sub-tasks, assigns the first task to the Electricity Dept and the second to the Forest Dept, and strictly enforces dependencies.
+
+### 3. 📸 AI-Powered "Fake Closure" Prevention (Vision Circuit Breaker)
+To prevent corrupt officials from uploading stock photos or irrelevant images to close tickets, our backend utilizes **Vision AI (GPT-4o)** to cross-verify the officer's uploaded "Proof of Work" against the citizen's original photo. Visually disconnected images instantly trigger a Fraud Alert and block the closure.
+
+### 4. 🎙️ Zero-Friction Voice & Multilingual Inclusivity
+Citizens can simply use Voice-to-Text in their native language (e.g., Hindi, regional dialects). The AI translates and structures the complaint into professional English for the backend while keeping the frontend UI localized for the citizen.
+
+### 5. 🛡️ Human-in-the-Loop (HITL) with Primary Lead Agency RBAC
+Complex, multi-departmental AI plans are not executed blindly. They are routed to a **HITL Dashboard** where the Primary Lead Agency Head must approve the AI's plan. A strict Role-Based Access Control (RBAC) ensures action buttons are hidden from Heads (Oversight only) and visible only to assigned field officers.
+
+### 6. 📱 WhatsApp Integration viaSocket (App-less Governance)
+Citizens do not need to download any new app. They can file complaints and receive real-time Ticket ID updates directly via a WhatsApp Webhook (integrated using viaSocket & Twilio API).
 A ticket can **never** be officially closed by an officer alone. When an officer marks a job as "Completed", the system emails the Citizen with photographic evidence of the fixed issue. The citizen must manually click **Verify & Accept** on their dashboard. If they click **Reject**, the ticket is instantly reopened, and the officer is penalized.
 
 ### 2. 📍 Geo-Fencing Accountability

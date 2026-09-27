@@ -41,12 +41,12 @@ exports.handleWebhook = asyncHandler(async (req, res) => {
     
     const locationObj = { type: 'Point', coordinates: [77.2090, 28.6139] }; // Default Delhi coords
     
-    const ai = classifyComplaint(title, description);
+    const ai = await classifyComplaint(title, description);
 
-    // 3. Find matching department
+    // 3. Find matching department for the correct state
     let dept = null;
     if (ai.category !== 'other') {
-      dept = await Department.findOne({ categoryMatches: ai.category });
+      dept = await Department.findOne({ complaintCategories: ai.category, state: 'MP' });
     }
 
     // Calculate due date based on priority
@@ -58,6 +58,8 @@ exports.handleWebhook = asyncHandler(async (req, res) => {
       title,
       description,
       address: 'Reported via WhatsApp',
+      state: 'MP',
+      district: 'Indore',
       location: locationObj,
       category: ai.category,
       priority: ai.isCritical ? 'critical' : ai.priority,
