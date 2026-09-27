@@ -444,7 +444,27 @@ exports.updateStatus = asyncHandler(async (req, res) => {
   const complaint = await Complaint.findById(req.params.id);
   if (!complaint) throw new AppError('Complaint not found', 404);
 
-  // Run Fraud Detection on uploaded images
+  // Run AI Vision Fraud Detection on resolution proof images
+  if (req.files && req.files.length > 0 && status === 'pending_verification') {
+    const filePaths = req.files.map(f => f.path);
+    // Use the complaint title and resolutionNote to give context to the AI
+    const visionResult = await detectFakeEvidence(filePaths, complaint.title, resolutionNote || note || 'Resolved');
+    
+    if (visionResult && visionResult.isFake) {
+      await AuditLog.create({
+        action: 'AI_FRAUD_DETECTED',
+        entityType: 'complaint',
+        entityId: complaint._id,
+        suspicious: true,
+        suspicionReason: visionResult.reason,
+        details: { userRole: req.user.role, userId: req.user._id, context: 'Officer Resolution Proof' },
+        state: req.user.state
+      });
+      throw new AppError(`AI Vision Rejected Proof: ${visionResult.reason}`, 400);
+    }
+  }
+
+  // Run Perceptual Hashing (Jimp) for duplicate image detection
   const proofImageHashes = [];
   for (const imgPath of images) {
     const { hash } = await processImageForFraud(imgPath, complaint._id, req.user._id, req.io);

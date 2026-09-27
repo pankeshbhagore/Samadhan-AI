@@ -22,21 +22,21 @@ exports.detectFakeEvidence = async (imagePaths, title, description) => {
     const mimeType = ext === 'png' ? 'image/png' : (ext === 'webp' ? 'image/webp' : 'image/jpeg');
 
     const prompt = `You are a strict AI Fraud Detection agent for a government grievance portal.
-A citizen has submitted a complaint with the following details:
+A complaint has the following details:
 Title: "${title}"
 Description: "${description}"
 
-Attached is the photo evidence they uploaded. 
+Attached is the photo evidence uploaded by either a citizen (reporting the issue) or an officer (claiming the issue is fixed). 
 Analyze the image EXTREMELY STRICTLY against these rules:
 1. Is the image a flowchart, diagram, text screenshot, meme, or graphic? -> REJECT (isFake: true)
 2. Is the image completely irrelevant to the described grievance? (e.g., uploading a selfie for a pothole, or a dog for a fire) -> REJECT (isFake: true)
 3. Does the image appear to be downloaded from the internet, a stock photo, or from a news channel? Look for watermarks, logos, unnatural professional lighting, or compression artifacts typical of generic internet imagery. -> REJECT (isFake: true)
-4. The image MUST appear to be a real-world photograph taken recently by a citizen on a mobile phone, clearly showing the issue described in the text. If it looks like a generic web image or stock photography -> REJECT (isFake: true)
+4. The image MUST appear to be a raw, real-world photograph taken recently on a mobile phone, clearly showing either the issue described in the text OR the resolution of the issue. If it looks like a generic web image or stock photography -> REJECT (isFake: true)
 
 Return ONLY a JSON object in this exact format:
 {
   "isFake": boolean,
-  "reason": "Short explanation of why it is rejected, or 'Valid' if it is a legitimate real-world citizen photo of the issue."
+  "reason": "Short explanation of why it is rejected, or 'Valid' if it is a legitimate real-world citizen or officer photo of the issue."
 }`;
 
     const response = await openai.chat.completions.create({
