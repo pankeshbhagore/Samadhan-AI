@@ -394,52 +394,78 @@ export default function ComplaintDetail() {
       {renderStepper()}
 
       {complaint.isComplex && complaint.agenticPlan && complaint.agenticPlan.length > 0 && (
-        <div className="card" style={{ marginBottom: 20, border: '1px solid #c4b5fd', background: '#f5f3ff' }}>
+        <div className="card" style={{ marginBottom: 20, border: '1px solid #c7d2fe', boxShadow: '0 4px 6px -1px rgba(99, 102, 241, 0.1)' }}>
+          <div className="card-header" style={{ background: '#e0e7ff' }}>
+            <div className="card-title" style={{ color: '#3730a3', display: 'flex', alignItems: 'center', gap: 8 }}>
+              🤖 Agentic AI Resolution Plan
+            </div>
+            {complaint.humanInterventionRequired && (
+              <span className="badge badge-danger">Human Intervention Required</span>
+            )}
+            {complaint.status === 'pending_hitl_approval' && (
+              <span style={{ fontSize: 11, background: '#fef08a', color: '#854d0e', padding: '2px 8px', borderRadius: 12, fontWeight: 600 }}>Awaiting Supervisor Approval</span>
+            )}
+          </div>
           <div className="card-body">
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: '#5b21b6', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-              🤖 AI Proposed Resolution Plan
-              {complaint.status === 'pending_hitl_approval' && (
-                <span style={{ fontSize: 11, background: '#fef08a', color: '#854d0e', padding: '2px 8px', borderRadius: 12, fontWeight: 600 }}>Awaiting Supervisor Approval</span>
-              )}
-            </h3>
-            
-            <p style={{ fontSize: 13, color: '#4c1d95', marginBottom: 16 }}>
-              {complaint.agenticReasoning || "This complaint requires multiple steps to resolve. The AI has proposed the following sequence of actions:"}
+            <p style={{ fontSize: 14, color: '#4338ca', marginBottom: 16 }}>
+              <strong>AI Reasoning:</strong> {complaint.agenticReasoning || "This complaint requires multiple steps to resolve. The AI has proposed the following sequence of actions:"}
             </p>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {complaint.escalationReason && (
+              <div className="alert alert-critical" style={{ marginBottom: 16 }}>
+                <strong>Escalation Reason:</strong> {complaint.escalationReason}
+              </div>
+            )}
+            
+            <div style={{ display: 'grid', gap: 12 }}>
               {complaint.agenticPlan.map((task, idx) => (
-                <div key={idx} style={{ background: '#fff', padding: '12px 16px', borderRadius: 8, border: '1px solid #e0e7ff', display: 'flex', gap: 16 }}>
-                  <div style={{ background: '#ede9fe', color: '#6d28d9', fontWeight: 'bold', width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    {idx + 1}
-                  </div>
+                <div key={task.taskId} style={{ 
+                  border: task.status === 'in_progress' ? '2px solid #3b82f6' : '1px solid #e2e8f0', 
+                  borderRadius: 8, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+                  background: task.status === 'completed' ? '#f0fdf4' : task.status === 'blocked' ? '#fef2f2' : task.status === 'in_progress' ? '#eff6ff' : '#fff',
+                  boxShadow: task.status === 'in_progress' ? '0 4px 6px -1px rgba(59, 130, 246, 0.2)' : 'none'
+                }}>
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: '#1e293b', marginBottom: 4 }}>
-                      {task.taskDescription}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                      <span className={`badge ${task.status === 'completed' ? 'badge-success' : task.status === 'in_progress' ? 'badge-primary' : task.status === 'blocked' ? 'badge-danger' : ''}`}>{task.status.replace('_', ' ').toUpperCase()}</span>
+                      <strong style={{ fontSize: 15 }}>Task {idx + 1}: {task.department?.name || 'Unassigned Dept'}</strong>
+                      {task.dependency && <span style={{ fontSize: 12, color: '#64748b' }}>(Depends on: {task.dependency})</span>}
                     </div>
-                    <div style={{ display: 'flex', gap: 12, fontSize: 12, color: '#64748b', alignItems: 'center', flexWrap: 'wrap' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#6d28d9' }}></span>
-                        {task.department?.name || 'Unknown Department'}
-                      </span>
-                      {task.dependency && (
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#d97706' }}>
-                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#d97706' }}></span>
-                          Waits for: {task.dependency}
-                        </span>
-                      )}
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: task.status === 'completed' ? '#10b981' : task.status === 'in_progress' ? '#3b82f6' : '#cbd5e1' }}></span>
-                        Status: {task.status.replace('_', ' ')}
-                      </span>
-                      {task.assignedTo && (
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6' }}></span>
-                          Officer: {task.assignedTo.name || 'Assigned'}
-                        </span>
-                      )}
-                    </div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 4 }}>{task.taskDescription}</div>
+                    {task.status === 'blocked' && task.blockReason && (
+                      <div style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 4, background: '#fee2e2', padding: '4px 8px', borderRadius: 4, display: 'inline-block' }}>
+                        <strong>Block Reason:</strong> {task.blockReason}
+                      </div>
+                    )}
+                    {task.assignedTo && <div style={{ fontSize: 12, color: '#4338ca', marginTop: 4 }}>👤 Assigned to: {task.assignedTo?.name}</div>}
                   </div>
+                  {(() => {
+                    const userDeptId = typeof user?.department === 'object' ? user?.department?._id : user?.department;
+                    const taskDeptId = typeof task.department === 'object' ? task.department?._id : task.department;
+                    const hasAccess = isAdmin() || ((user?.role === 'department_head' || isEmployee()) && String(userDeptId) === String(taskDeptId));
+                    
+                    let isDependencyMet = true;
+                    if (task.dependency) {
+                      const depTask = complaint.agenticPlan.find(t => t.taskId === task.dependency);
+                      if (depTask && depTask.status !== 'completed') isDependencyMet = false;
+                    }
+                    
+                    return hasAccess && task.status !== 'completed' && (
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        {task.status !== 'in_progress' && (
+                          <button 
+                            className="btn btn-sm btn-outline" 
+                            disabled={actionLoading || !isDependencyMet} 
+                            onClick={() => handleSubTaskUpdate(task.taskId, 'in_progress')}
+                            title={!isDependencyMet ? `Locked. Waiting for ${task.dependency} to complete.` : ''}
+                          >
+                            ▶ Start
+                          </button>
+                        )}
+                        <button className="btn btn-sm btn-success" disabled={actionLoading || (!isDependencyMet && task.status !== 'in_progress')} onClick={() => handleSubTaskUpdate(task.taskId, 'completed')}>✅ Done</button>
+                        <button className="btn btn-sm btn-danger" disabled={actionLoading} onClick={() => handleSubTaskUpdate(task.taskId, 'blocked')}>🚫 Block</button>
+                      </div>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
@@ -590,82 +616,6 @@ export default function ComplaintDetail() {
         </div>
       </div>
 
-      {complaint.isComplex && complaint.agenticPlan && complaint.agenticPlan.length > 0 && (
-        <div className="card" style={{ marginTop: 24, border: '1px solid #c7d2fe', boxShadow: '0 4px 6px -1px rgba(99, 102, 241, 0.1)' }}>
-          <div className="card-header" style={{ background: '#e0e7ff' }}>
-            <div className="card-title" style={{ color: '#3730a3', display: 'flex', alignItems: 'center', gap: 8 }}>
-              🤖 Agentic AI Resolution Plan
-            </div>
-            {complaint.humanInterventionRequired && (
-              <span className="badge badge-danger">Human Intervention Required</span>
-            )}
-          </div>
-          <div className="card-body">
-            <p style={{ fontSize: 14, color: '#4338ca', marginBottom: 16 }}>
-              <strong>AI Reasoning:</strong> {complaint.agenticReasoning}
-            </p>
-            {complaint.escalationReason && (
-              <div className="alert alert-critical" style={{ marginBottom: 16 }}>
-                <strong>Escalation Reason:</strong> {complaint.escalationReason}
-              </div>
-            )}
-            
-            <div style={{ display: 'grid', gap: 12 }}>
-              {complaint.agenticPlan.map((task, idx) => (
-                <div key={task.taskId} style={{ 
-                  border: task.status === 'in_progress' ? '2px solid #3b82f6' : '1px solid #e2e8f0', 
-                  borderRadius: 8, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
-                  background: task.status === 'completed' ? '#f0fdf4' : task.status === 'blocked' ? '#fef2f2' : task.status === 'in_progress' ? '#eff6ff' : '#fff',
-                  boxShadow: task.status === 'in_progress' ? '0 4px 6px -1px rgba(59, 130, 246, 0.2)' : 'none'
-                }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                      <span className={`badge ${task.status === 'completed' ? 'badge-success' : task.status === 'in_progress' ? 'badge-primary' : task.status === 'blocked' ? 'badge-danger' : ''}`}>{task.status.replace('_', ' ').toUpperCase()}</span>
-                      <strong style={{ fontSize: 15 }}>Task {idx + 1}: {task.department?.name || 'Unassigned Dept'}</strong>
-                      {task.dependency && <span style={{ fontSize: 12, color: '#64748b' }}>(Depends on: {task.dependency})</span>}
-                    </div>
-                    <div style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 4 }}>{task.taskDescription}</div>
-                    {task.status === 'blocked' && task.blockReason && (
-                      <div style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 4, background: '#fee2e2', padding: '4px 8px', borderRadius: 4, display: 'inline-block' }}>
-                        <strong>Block Reason:</strong> {task.blockReason}
-                      </div>
-                    )}
-                    {task.assignedTo && <div style={{ fontSize: 12, color: '#4338ca', marginTop: 4 }}>👤 Assigned to: {task.assignedTo?.name}</div>}
-                  </div>
-                  {(() => {
-                    const userDeptId = typeof user?.department === 'object' ? user?.department?._id : user?.department;
-                    const taskDeptId = typeof task.department === 'object' ? task.department?._id : task.department;
-                    const hasAccess = isAdmin() || ((user?.role === 'department_head' || isEmployee()) && String(userDeptId) === String(taskDeptId));
-                    
-                    let isDependencyMet = true;
-                    if (task.dependency) {
-                      const depTask = complaint.agenticPlan.find(t => t.taskId === task.dependency);
-                      if (depTask && depTask.status !== 'completed') isDependencyMet = false;
-                    }
-                    
-                    return hasAccess && task.status !== 'completed' && (
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        {task.status !== 'in_progress' && (
-                          <button 
-                            className="btn btn-sm btn-outline" 
-                            disabled={actionLoading || !isDependencyMet} 
-                            onClick={() => handleSubTaskUpdate(task.taskId, 'in_progress')}
-                            title={!isDependencyMet ? `Locked. Waiting for ${task.dependency} to complete.` : ''}
-                          >
-                            ▶ Start
-                          </button>
-                        )}
-                        <button className="btn btn-sm btn-success" disabled={actionLoading || (!isDependencyMet && task.status !== 'in_progress')} onClick={() => handleSubTaskUpdate(task.taskId, 'completed')}>✅ Done</button>
-                        <button className="btn btn-sm btn-danger" disabled={actionLoading} onClick={() => handleSubTaskUpdate(task.taskId, 'blocked')}>🚫 Block</button>
-                      </div>
-                    );
-                  })()}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       {showSubtaskDone && (
         <div className="modal-overlay" onClick={() => setShowSubtaskDone(false)}>
