@@ -927,11 +927,25 @@ exports.updateSubTaskStatus = asyncHandler(async (req, res) => {
     // Auto-assign task to the employee who starts it if not already assigned
     if (status === 'in_progress' && !task.assignedTo && req.user.role === 'employee') {
       task.assignedTo = req.user._id;
+      await notify(req.io, {
+        recipientId: req.user._id,
+        type: 'agentic_task_claimed',
+        title: 'Task Claimed Successfully',
+        message: `You have claimed the sub-task: ${task.taskDescription}`,
+        complaintId: complaint._id
+      });
     }
   }
 
-  if (assignedTo) {
+  if (assignedTo && !task.assignedTo) {
     task.assignedTo = assignedTo;
+    await notify(req.io, {
+      recipientId: assignedTo,
+      type: 'agentic_task_assigned',
+      title: 'New Sub-Task Assigned',
+      message: `You have been assigned the sub-task: ${task.taskDescription}`,
+      complaintId: complaint._id
+    });
   }
 
   if (status === 'blocked' && blockReason) {
@@ -951,7 +965,7 @@ exports.updateSubTaskStatus = asyncHandler(async (req, res) => {
   if (status === 'blocked') {
     await replanComplaintAgentically(complaint._id, taskId, blockReason || "No reason provided");
   } else {
-    await trackAndCoordinateProgress(complaint._id);
+    await trackAndCoordinateProgress(complaint._id, req.io);
   }
 
   const updatedComplaint = await Complaint.findById(complaint._id)

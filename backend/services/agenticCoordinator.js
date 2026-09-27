@@ -3,6 +3,7 @@ const Department = require('../models/Department');
 const Complaint = require('../models/Complaint');
 const User = require('../models/User');
 const { sendComplaintUpdatedEmail, sendOfficerAssignedEmail } = require('./emailService');
+const { notifyMany } = require('./notificationService');
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -182,7 +183,7 @@ async function analyzeComplaintAgentically(complaintId) {
 /**
  * Checks the status of subtasks and updates the main complaint status or triggers next steps.
  */
-async function trackAndCoordinateProgress(complaintId) {
+async function trackAndCoordinateProgress(complaintId, io = null) {
     const complaint = await Complaint.findById(complaintId);
     if(!complaint || !complaint.isComplex) return;
 
@@ -198,7 +199,23 @@ async function trackAndCoordinateProgress(complaintId) {
             const dependencyTask = complaint.agenticPlan.find(t => t.taskId === task.dependency);
             if(dependencyTask && dependencyTask.status === 'completed') {
                 task.status = 'in_progress';
-                // Trigger Socket.io notification to the department here in a real scenario
+                // Trigger notification to the department
+                if (io && task.department) {
+                    const deptEmployees = await User.find({ 
+                        department: task.department, 
+                        role: 'employee',
+                        state: complaint.state
+                    }).select('_id');
+                    
+                    if (deptEmployees.length > 0) {
+                        await notifyMany(io, deptEmployees.map(e => e._id), {
+                            type: 'agentic_task_unlocked',
+                            title: 'New Agentic Sub-Task Ready',
+                            message: `Dependency completed. You can now claim and start: ${task.taskDescription}`,
+                            complaintId: complaint._id
+                        });
+                    }
+                }
             }
         }
     }

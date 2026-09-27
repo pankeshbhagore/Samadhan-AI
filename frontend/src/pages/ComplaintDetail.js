@@ -441,7 +441,19 @@ export default function ComplaintDetail() {
                   {(() => {
                     const userDeptId = typeof user?.department === 'object' ? user?.department?._id : user?.department;
                     const taskDeptId = typeof task.department === 'object' ? task.department?._id : task.department;
-                    const hasAccess = isAdmin() || ((user?.role === 'department_head' || isEmployee()) && String(userDeptId) === String(taskDeptId));
+                    
+                    const isTaskDeptEmployee = isEmployee() && String(userDeptId) === String(taskDeptId);
+                    const assigneeId = typeof task.assignedTo === 'object' ? task.assignedTo?._id : task.assignedTo;
+                    const isAssignedToMe = assigneeId && String(assigneeId) === String(user?._id);
+                    const isUnassigned = !assigneeId;
+
+                    // Unassigned task in the employee's department -> They can see the 'Start' (Claim) button
+                    const canClaim = isUnassigned && isTaskDeptEmployee;
+                    // Assigned to me OR I am a super_admin -> I can see 'Done' and 'Block'
+                    const hasActionAccess = isAdmin() || isAssignedToMe;
+                    
+                    // Whether to show ANY buttons
+                    const showButtons = isAdmin() || canClaim || hasActionAccess;
                     
                     let isDependencyMet = true;
                     if (task.dependency) {
@@ -449,20 +461,24 @@ export default function ComplaintDetail() {
                       if (depTask && depTask.status !== 'completed') isDependencyMet = false;
                     }
                     
-                    return hasAccess && task.status !== 'completed' && (
+                    return showButtons && task.status !== 'completed' && (
                       <div style={{ display: 'flex', gap: 8 }}>
-                        {task.status !== 'in_progress' && (
+                        {task.status !== 'in_progress' && (isAdmin() || canClaim) && (
                           <button 
                             className="btn btn-sm btn-outline" 
                             disabled={actionLoading || !isDependencyMet} 
                             onClick={() => handleSubTaskUpdate(task.taskId, 'in_progress')}
                             title={!isDependencyMet ? `Locked. Waiting for ${task.dependency} to complete.` : ''}
                           >
-                            ▶ Start
+                            ▶ {canClaim ? 'Claim & Start' : 'Start'}
                           </button>
                         )}
-                        <button className="btn btn-sm btn-success" disabled={actionLoading || (!isDependencyMet && task.status !== 'in_progress')} onClick={() => handleSubTaskUpdate(task.taskId, 'completed')}>✅ Done</button>
-                        <button className="btn btn-sm btn-danger" disabled={actionLoading} onClick={() => handleSubTaskUpdate(task.taskId, 'blocked')}>🚫 Block</button>
+                        {hasActionAccess && (
+                          <>
+                            <button className="btn btn-sm btn-success" disabled={actionLoading || (!isDependencyMet && task.status !== 'in_progress')} onClick={() => handleSubTaskUpdate(task.taskId, 'completed')}>✅ Done</button>
+                            <button className="btn btn-sm btn-danger" disabled={actionLoading} onClick={() => handleSubTaskUpdate(task.taskId, 'blocked')}>🚫 Block</button>
+                          </>
+                        )}
                       </div>
                     );
                   })()}
