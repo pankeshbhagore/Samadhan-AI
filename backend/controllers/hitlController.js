@@ -13,9 +13,19 @@ exports.getPendingHitlRequests = async (req, res) => {
       filter.complaintId = req.query.complaintId;
     }
 
-    const requests = await HitlRequest.find(filter)
+    let requests = await HitlRequest.find(filter)
       .populate('complaintId', 'ticketId title status category department')
       .sort({ createdAt: -1 });
+
+    // Lead Agency Logic: If user is a department head, only show HITLs where their department is the primary lead
+    if (req.user.role === 'department_head' && req.user.department) {
+      const userDeptId = (req.user.department._id || req.user.department).toString();
+      requests = requests.filter(r => {
+        if (!r.complaintId || !r.complaintId.department) return false;
+        const complaintDeptId = (r.complaintId.department._id || r.complaintId.department).toString();
+        return complaintDeptId === userDeptId;
+      });
+    }
 
     res.json(requests);
   } catch (error) {
@@ -32,6 +42,15 @@ exports.resolveHitlRequest = async (req, res) => {
     const hitlRequest = await HitlRequest.findById(id).populate('complaintId');
     if (!hitlRequest) return res.status(404).json({ error: 'Request not found' });
     if (hitlRequest.status !== 'pending') return res.status(400).json({ error: `Request already ${hitlRequest.status}` });
+
+    // Lead Agency Logic: Check if the department head is authorized for this specific complaint
+    if (req.user.role === 'department_head' && req.user.department) {
+      const userDeptId = (req.user.department._id || req.user.department).toString();
+      const complaintDeptId = (hitlRequest.complaintId.department._id || hitlRequest.complaintId.department).toString();
+      if (userDeptId !== complaintDeptId) {
+        return res.status(403).json({ error: 'You are not the Primary Lead Agency for this complaint. Only the primary department head can approve this plan.' });
+      }
+    }
 
     hitlRequest.status = action === 'approve' ? 'approved' : 'rejected';
     hitlRequest.reviewedBy = req.user._id;

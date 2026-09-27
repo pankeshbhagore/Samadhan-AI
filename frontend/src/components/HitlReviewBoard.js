@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import toast from 'react-hot-toast';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function HitlReviewBoard({ hitlRequest, onResolved }) {
   const [loading, setLoading] = useState(false);
   const [adminComments, setAdminComments] = useState('');
   const [departments, setDepartments] = useState({});
+  const { user } = useAuth();
   
   // For CREATE_PLAN, allow modifying the proposed plan
   const [modifiedPlan, setModifiedPlan] = useState(
@@ -58,6 +60,11 @@ export default function HitlReviewBoard({ hitlRequest, onResolved }) {
           <div style={{ fontSize: 13, color: '#92400e' }}>
             The AI Agent has paused execution and is requesting administrative approval to proceed.
           </div>
+          {user?.role === 'department_head' && (
+            <div style={{ marginTop: 6, fontSize: 12, fontWeight: 'bold', color: '#166534', background: '#dcfce7', padding: '4px 8px', borderRadius: 4, display: 'inline-block' }}>
+              🌟 You are authorizing this as the Primary Lead Agency
+            </div>
+          )}
         </div>
       </div>
 
