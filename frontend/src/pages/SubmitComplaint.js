@@ -6,7 +6,7 @@ import { submitComplaint } from '../services/api';
 import { CATEGORY_OPTIONS } from '../utils/helpers';
 import { getErrorMessage } from '../utils/helpers';
 import toast from 'react-hot-toast';
-import { MapPin, Upload, AlertTriangle, Lightbulb } from 'lucide-react';
+import { MapPin, Upload, AlertTriangle, Lightbulb, Mic } from 'lucide-react';
 
 const CRITICAL_PATTERNS = ['collapse', 'fire', 'gas leak', 'electrocution', 'flood', 'emergency', 'danger', 'death', 'injured', 'urgent'];
 const CATEGORY_HINTS = [
@@ -28,6 +28,31 @@ export default function SubmitComplaint() {
   const [aiSuggestion, setAiSuggestion] = useState(null);
   const [isCriticalDetected, setIsCriticalDetected] = useState(false);
   const [form, setForm] = useState({ title: '', description: '', category: '', address: '', ward: '', district: '', pincode: '', landmark: '', lat: '', lng: '' });
+  const [isListening, setIsListening] = useState(false);
+  
+  const handleListen = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      return toast.error("Your browser does not support Voice Recognition.");
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-IN';
+    recognition.continuous = false;
+    
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = (e) => {
+      setIsListening(false);
+      toast.error("Microphone error: " + e.error);
+    };
+    
+    recognition.onresult = (e) => {
+      const transcript = e.results[0][0].transcript;
+      setForm(f => ({ ...f, description: f.description ? f.description + ' ' + transcript : transcript }));
+    };
+    
+    recognition.start();
+  };
   
   const { user } = useAuth();
 
@@ -189,7 +214,25 @@ export default function SubmitComplaint() {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Description <span style={{ color: 'var(--danger)' }}>*</span></label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <label className="form-label" style={{ marginBottom: 0 }}>Description <span style={{ color: 'var(--danger)' }}>*</span></label>
+                <button 
+                  type="button" 
+                  onClick={handleListen} 
+                  className="btn btn-sm" 
+                  style={{ 
+                    background: isListening ? '#fee2e2' : '#f1f5f9', 
+                    color: isListening ? '#ef4444' : '#64748b', 
+                    border: 'none', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 6,
+                    animation: isListening ? 'pulse 1.5s infinite' : 'none'
+                  }}
+                >
+                  <Mic size={14} /> {isListening ? 'Listening...' : 'Speak to Type'}
+                </button>
+              </div>
               <textarea className="form-control" rows={4} placeholder="Describe the issue in detail — how long it's been there, who is affected, what impact it has..." value={form.description} onChange={set('description')} maxLength={2000} />
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{form.description.length}/2000 characters. Detailed descriptions get faster resolution.</div>
             </div>
