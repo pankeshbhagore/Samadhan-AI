@@ -39,6 +39,18 @@ A scheduled CRON service automatically generates weekly, monthly, and yearly per
 
 ---
 
+## 🏆 Hackathon Agentic AI Challenges Implemented
+
+### Challenge 1: AI Fraud Detection Circuit Breaker
+**Problem:** Citizens could upload fake images, stock photos, or irrelevant memes (e.g., uploading a selfie for a pothole), wasting administrative time.
+**Solution:** A real-time LLM-powered circuit breaker intercepts all image uploads. Using OpenAI's `gpt-4o` Vision model, the system analyzes the image strictly against the complaint description. If the AI detects a stock photo, a downloaded internet image, a flowchart, or semantic irrelevance, it **halts execution immediately**. No database mutations occur, and a structured 400 Bad Request trace is sent to the client, preventing the system from processing fraudulent submissions.
+
+### Challenge 2: State-Preserving Agentic Human-in-the-Loop (HITL) Handoff
+**Problem:** Autonomous AI can make mistakes when routing highly complex, multi-department complaints (e.g., "Electrical failure and a fallen tree" requires both Electricity and Parks departments). Letting AI autonomously trigger irreversible actions is risky.
+**Solution:** The system features an `agenticCoordinator` that generates a multi-step resolution plan using LLMs. However, before assigning officers or dispatching resources, the Agent pauses its execution. It saves its proposed plan (state) in a persistent `HitlRequest` collection and marks the ticket as `PENDING HITL APPROVAL`. A Human Administrator reviews the AI's proposed plan via a dedicated Dashboard UI and can Approve, Modify, or Reject the agent's logic before execution resumes.
+
+---
+
 ## 🛠️ Technology Stack
 
 ### Frontend (Client-Side)
