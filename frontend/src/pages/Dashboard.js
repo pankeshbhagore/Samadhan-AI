@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
-import { getComplaints, getMyStats } from '../services/api';
+import { getComplaints, getMyStats, api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { formatCategory, formatStatus } from '../utils/helpers';
 import { format } from 'date-fns';
 import { Plus, CheckCircle, Clock, FileText } from 'lucide-react';
+import HitlReviewBoard from '../components/HitlReviewBoard';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -14,16 +15,22 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [myStats, setMyStats] = useState({ total: 0, pending: 0, resolved: 0 });
 
+  const [hitlRequests, setHitlRequests] = useState([]);
+  const [activeHitlRequest, setActiveHitlRequest] = useState(null);
+  const isAdminOrHead = user?.role === 'super_admin' || user?.role === 'cm' || user?.role === 'department_head';
+
   useEffect(() => {
     Promise.all([
       getComplaints({ limit: 100 }),
-      getMyStats()
-    ]).then(([complaintsRes, statsRes]) => {
+      getMyStats(),
+      isAdminOrHead ? api.get('/hitl/pending').then(r => r.data) : Promise.resolve([])
+    ]).then(([complaintsRes, statsRes, hitlRes]) => {
       setComplaints(complaintsRes.data.complaints);
       setMyStats(statsRes.data.stats);
+      setHitlRequests(hitlRes);
     }).catch(() => toast.error('Failed to load dashboard data'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [isAdminOrHead]);
 
   const needsVerification = complaints.filter((c) => c.status === 'pending_verification');
 
@@ -53,6 +60,40 @@ export default function Dashboard() {
           <button className="btn btn-sm btn-success">Verify Now →</button>
         </div>
       ))}
+
+      {hitlRequests.length > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 12, marginTop: 24 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 600 }}>Administrative HITL Approvals ({hitlRequests.length})</h2>
+        </div>
+      )}
+
+      {hitlRequests.map((req) => (
+        <div key={req._id} className="alert" style={{ background: '#fffbeb', border: '1px solid #f59e0b', marginBottom: 12, cursor: 'pointer', display: 'flex', gap: 12 }} onClick={() => req.complaintId ? navigate(`/complaints/${req.complaintId._id}`) : setActiveHitlRequest(req)}>
+          <span style={{ fontSize: 20 }}>🛑</span>
+          <div style={{ flex: 1 }}>
+            <strong style={{ color: '#b45309' }}>{req.type.replace('_', ' ')} Review Required</strong>
+            <div style={{ fontSize: 12, color: '#92400e' }}>
+              {req.complaintId ? `Complaint: ${req.complaintId.ticketId} - ${req.complaintId.title}` : 'System-wide Action'}
+            </div>
+          </div>
+          <button className="btn btn-sm btn-warning">Review →</button>
+        </div>
+      ))}
+
+      {activeHitlRequest && (
+        <div className="modal-overlay" onClick={() => setActiveHitlRequest(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 800, width: '90%' }}>
+            <HitlReviewBoard 
+              hitlRequest={activeHitlRequest} 
+              onResolved={() => {
+                setActiveHitlRequest(null);
+                api.get('/hitl/pending').then(r => setHitlRequests(r.data));
+              }}
+            />
+            <button className="btn btn-outline" style={{ width: '100%' }} onClick={() => setActiveHitlRequest(null)}>Close</button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-3" style={{ marginBottom: 24 }}>
         <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => navigate('/complaints')}><div className="stat-icon" style={{ background: '#f0fdf4' }}><FileText size={22} color="var(--success)" /></div><div><div className="stat-value" style={{ color: 'var(--success)' }}>{myStats.total}</div><div className="stat-label">Total Submitted</div></div></div>

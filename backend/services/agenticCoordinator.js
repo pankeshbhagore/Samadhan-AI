@@ -141,47 +141,33 @@ async function analyzeComplaintAgentically(complaintId) {
     const mongoose = require('mongoose');
 
     if (aiAnalysis.isComplex && aiAnalysis.agenticPlan && aiAnalysis.agenticPlan.length > 0) {
-      // Auto-assign subtasks to available employees in the respective departments
-      const employees = await User.find({ role: 'employee' }).select('_id department name email');
-      
-      complaint.agenticPlan = aiAnalysis.agenticPlan.map(task => {
+      const formattedPlan = aiAnalysis.agenticPlan.map(task => {
         let validDeptId = null;
         if (task.departmentId && mongoose.Types.ObjectId.isValid(task.departmentId)) {
           validDeptId = task.departmentId;
         }
-
-        // Find an employee in this department to auto-assign
-        let assignedOfficer = null;
-        if (validDeptId) {
-          const primaryDeptId = (complaint.department?._id || complaint.department)?.toString();
-          if (primaryDeptId === validDeptId.toString() && complaint.assignedTo) {
-             // Reuse the already assigned primary officer for this department's subtask
-             assignedOfficer = (complaint.assignedTo?._id || complaint.assignedTo);
-             const deptEmployee = employees.find(emp => emp._id.toString() === assignedOfficer.toString());
-             if (deptEmployee) {
-                sendOfficerAssignedEmail(deptEmployee.email, deptEmployee.name, complaint.ticketId, task.taskDescription).catch(err => console.error(err));
-             }
-          } else {
-            // Assign to any available employee in that department
-            const deptEmployee = employees.find(emp => emp.department?.toString() === validDeptId.toString());
-            if (deptEmployee) {
-              assignedOfficer = deptEmployee._id;
-              // Send email notification asynchronously
-              sendOfficerAssignedEmail(deptEmployee.email, deptEmployee.name, complaint.ticketId, task.taskDescription).catch(err => console.error(err));
-            }
-          }
-        }
-
         return {
           taskId: task.taskId,
           department: validDeptId,
           taskDescription: task.taskDescription,
           status: 'pending',
           dependency: task.dependency || null,
-          assignedTo: assignedOfficer
+          assignedTo: null
         };
       });
-      
+
+      // HITL GATE: PAUSE HERE
+      const HitlRequest = require('../models/HitlRequest');
+      await HitlRequest.create({
+        complaintId: complaint._id,
+        type: 'CREATE_PLAN',
+        contextData: { reason: complaint.agenticReasoning, humanInterventionRequired: complaint.humanInterventionRequired },
+        proposedAction: formattedPlan,
+        status: 'pending'
+      });
+
+      complaint.status = 'pending_hitl_approval';
+    } else {
       complaint.status = aiAnalysis.humanInterventionRequired ? 'escalated' : 'in_progress';
     }
 
@@ -232,12 +218,18 @@ async function trackAndCoordinateProgress(complaintId) {
           isAutomatic: true 
         });
         statusChanged = true;
-    } else if (anyBlocked && complaint.status !== 'escalated') {
-        complaint.humanInterventionRequired = true;
-        complaint.escalationReason = "A sub-task has been marked as blocked. Human intervention is required to resolve the dependency.";
-        complaint.status = 'escalated';
-        newStatus = 'escalated';
-        message = complaint.escalationReason;
+    } else if (anyBlocked && complaint.status !== 'escalated' && complaint.status !== 'pending_hitl_approval') {
+        const HitlRequest = require('../models/HitlRequest');
+        await HitlRequest.create({
+          complaintId: complaint._id,
+          type: 'ESCALATION',
+          contextData: { reason: "A sub-task has been marked as blocked. Human intervention is required to resolve the dependency." },
+          status: 'pending'
+        });
+        
+        complaint.status = 'pending_hitl_approval';
+        newStatus = 'pending_hitl_approval';
+        message = 'Task blocked. Awaiting administrative review for escalation.';
         statusChanged = true;
     }
 

@@ -110,13 +110,9 @@ export default function SubmitComplaint() {
 
     setIsCriticalDetected(CRITICAL_PATTERNS.some((p) => text.includes(p)));
 
-    if (!form.category) {
-      const match = CATEGORY_HINTS.find((s) => s.words.some((w) => text.includes(w)));
-      setAiSuggestion(match ? match.cat : null);
-    } else {
-      setAiSuggestion(null);
-    }
-  }, [form.title, form.description, form.category]);
+    const match = CATEGORY_HINTS.find((s) => s.words.some((w) => text.includes(w)));
+    setAiSuggestion(match ? match.cat : null);
+  }, [form.title, form.description]);
 
   const handleGeolocate = () => {
     if (!navigator.geolocation) return toast.error('Geolocation not supported on this device');
@@ -152,7 +148,7 @@ export default function SubmitComplaint() {
       toast.success(`Complaint submitted! Ticket: ${data.complaint.ticketId}`);
       navigate(`/complaints/${data.complaint._id}`);
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Submission failed'));
+      toast.error(getErrorMessage(err, 'Submission failed'), { duration: 6000 });
     } finally { setLoading(false); }
   };
 

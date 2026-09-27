@@ -7,6 +7,8 @@ import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { MapPin, User, AlertTriangle, CheckCircle, Share2 } from 'lucide-react';
 import CommentsThread from '../components/shared/CommentsThread';
+import HitlReviewBoard from '../components/HitlReviewBoard';
+import { api } from '../services/api';
 
 export default function ComplaintDetail() {
   const { id } = useParams();
@@ -20,6 +22,7 @@ export default function ComplaintDetail() {
   const [showAssign, setShowAssign] = useState(false);
   const [showStatus, setShowStatus] = useState(false);
   const [showVerify, setShowVerify] = useState(false);
+  const [hitlRequest, setHitlRequest] = useState(null);
 
   const [selectedOfficer, setSelectedOfficer] = useState('');
   const [assignNote, setAssignNote] = useState('');
@@ -41,6 +44,11 @@ export default function ComplaintDetail() {
       setComplaint(data.complaint);
       if (isAdmin() || user?.role === 'department_head') {
         getOfficers({ department: data.complaint.department?._id }).then((r) => !cancelled && setOfficers(r.data.officers));
+      }
+      if (data.complaint.status === 'pending_hitl_approval' && (isAdmin() || user?.role === 'department_head')) {
+        api.get(`/hitl/pending?complaintId=${id}`).then((r) => {
+          if (!cancelled && r.data.length > 0) setHitlRequest(r.data[0]);
+        }).catch(e => console.error(e));
       }
     }).catch((err) => {
       toast.error(getErrorMessage(err, 'Could not load complaint'));
@@ -258,8 +266,9 @@ export default function ComplaintDetail() {
     const getResolvedIdx = (status) => {
       if (status === 'resolved') return 4;
       if (status === 'pending_verification') return 3;
-      if (status === 'in_progress' || status === 'escalated') return 2;
+      if (status === 'in_progress') return 2;
       if (status === 'assigned' || status === 'under_review' || status === 'reopened') return 1;
+      if (status === 'escalated') return complaint.assignedTo ? 1 : 0;
       return 0; // submitted
     };
     const resolvedIdx = getResolvedIdx(complaint.status);
@@ -310,7 +319,28 @@ export default function ComplaintDetail() {
 
   return (
     <div style={{ maxWidth: 900 }}>
+      {complaint.isFake && (
+        <div style={{ background: '#fef2f2', border: '2px solid #ef4444', borderRadius: 8, padding: 20, marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <span style={{ fontSize: 24 }}>🛑</span>
+            <h3 style={{ margin: 0, color: '#991b1b' }}>FAKE COMPLAINT DETECTED BY AI</h3>
+          </div>
+          <p style={{ margin: 0, color: '#7f1d1d', fontWeight: 500 }}>
+            The AI Vision module detected that the uploaded evidence is invalid, fake, or completely irrelevant to the grievance described.
+          </p>
+          <div style={{ marginTop: 12, padding: 12, background: '#fee2e2', borderRadius: 6, color: '#991b1b', fontSize: 14 }}>
+            <strong>AI Reason:</strong> {complaint.fakeReason}
+          </div>
+        </div>
+      )}
       <button onClick={() => navigate(-1)} className="btn btn-outline btn-sm" style={{ marginBottom: 16 }}>← Back</button>
+
+      {hitlRequest && (
+        <HitlReviewBoard 
+          hitlRequest={hitlRequest} 
+          onResolved={() => { setHitlRequest(null); refreshComplaint(); }} 
+        />
+      )}
 
       <div className="card" style={{ marginBottom: 20 }}>
         <div className="card-body">
@@ -363,6 +393,59 @@ export default function ComplaintDetail() {
 
       {renderStepper()}
 
+      {complaint.isComplex && complaint.agenticPlan && complaint.agenticPlan.length > 0 && (
+        <div className="card" style={{ marginBottom: 20, border: '1px solid #c4b5fd', background: '#f5f3ff' }}>
+          <div className="card-body">
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: '#5b21b6', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+              🤖 AI Proposed Resolution Plan
+              {complaint.status === 'pending_hitl_approval' && (
+                <span style={{ fontSize: 11, background: '#fef08a', color: '#854d0e', padding: '2px 8px', borderRadius: 12, fontWeight: 600 }}>Awaiting Supervisor Approval</span>
+              )}
+            </h3>
+            
+            <p style={{ fontSize: 13, color: '#4c1d95', marginBottom: 16 }}>
+              {complaint.agenticReasoning || "This complaint requires multiple steps to resolve. The AI has proposed the following sequence of actions:"}
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {complaint.agenticPlan.map((task, idx) => (
+                <div key={idx} style={{ background: '#fff', padding: '12px 16px', borderRadius: 8, border: '1px solid #e0e7ff', display: 'flex', gap: 16 }}>
+                  <div style={{ background: '#ede9fe', color: '#6d28d9', fontWeight: 'bold', width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    {idx + 1}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: '#1e293b', marginBottom: 4 }}>
+                      {task.taskDescription}
+                    </div>
+                    <div style={{ display: 'flex', gap: 12, fontSize: 12, color: '#64748b', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#6d28d9' }}></span>
+                        {task.department?.name || 'Unknown Department'}
+                      </span>
+                      {task.dependency && (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#d97706' }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#d97706' }}></span>
+                          Waits for: {task.dependency}
+                        </span>
+                      )}
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: task.status === 'completed' ? '#10b981' : task.status === 'in_progress' ? '#3b82f6' : '#cbd5e1' }}></span>
+                        Status: {task.status.replace('_', ' ')}
+                      </span>
+                      {task.assignedTo && (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6' }}></span>
+                          Officer: {task.assignedTo.name || 'Assigned'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {canVerify && (
         <div className="alert alert-warning" style={{ marginBottom: 20 }}>
@@ -429,11 +512,23 @@ export default function ComplaintDetail() {
             <div className="card-body">
               <div style={{ display: 'flex', gap: 8 }}>
                 <MapPin size={16} color="var(--accent)" style={{ flexShrink: 0, marginTop: 2 }} />
-                <div>
+                <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 500 }}>{complaint.address}</div>
                   {complaint.ward && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Ward: {complaint.ward}</div>}
                   {complaint.district && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>District: {complaint.district}</div>}
                   {complaint.landmark && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Landmark: {complaint.landmark}</div>}
+                  
+                  {complaint.location?.coordinates && complaint.location.coordinates.length === 2 && (
+                    <div style={{ marginTop: 8, padding: 8, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6 }}>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>GPS Coordinates</div>
+                      <div style={{ fontSize: 13, fontFamily: 'monospace', color: 'var(--primary)' }}>
+                        Lat: {complaint.location.coordinates[1].toFixed(6)}, Lng: {complaint.location.coordinates[0].toFixed(6)}
+                      </div>
+                      <a href={`https://www.google.com/maps?q=${complaint.location.coordinates[1]},${complaint.location.coordinates[0]}`} target="_blank" rel="noreferrer" style={{ fontSize: 12, display: 'inline-block', marginTop: 4, color: 'var(--accent)', textDecoration: 'none', fontWeight: 500 }}>
+                        🗺️ View on Google Maps
+                      </a>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

@@ -12,11 +12,25 @@ const { sendComplaintCreatedEmail, sendComplaintUpdatedEmail } = require('../ser
 const { AppError, asyncHandler } = require('../middleware/errorHandler');
 const { getStateFilter } = require('../middleware/stateFilter');
 const { triggerViaSocketWorkflow } = require('../utils/viasocket');
+const { detectFakeEvidence } = require('../services/aiVisionService');
 
 // ---- Submit new complaint ----
 exports.submitComplaint = asyncHandler(async (req, res) => {
   const { title, description, address, ward, district, pincode, landmark, coordinates, source, socialMediaRef } = req.body;
   const images = req.files?.map((f) => `/uploads/${f.filename}`) || [];
+  
+  // 1. Image Verification (AI Vision)
+  if (req.files && req.files.length > 0) {
+    const filePaths = req.files.map(f => f.path);
+    const visionResult = await detectFakeEvidence(filePaths, title, description);
+    
+    if (visionResult.isFake) {
+      return res.status(400).json({ 
+        success: false, 
+        error: `Submission Rejected by AI: ${visionResult.reason}` 
+      });
+    }
+  }
 
   const ai = classifyComplaint(title, description);
   const stateFilter = getStateFilter(req.user);
@@ -67,10 +81,13 @@ exports.submitComplaint = asyncHandler(async (req, res) => {
     isDuplicate,
     parentComplaint,
     dueDate,
+    status: 'submitted',
     sentimentScore: ai.sentiment?.score,
     sentimentLabel: ai.sentiment?.label,
     estimatedResolutionHours: ai.estimatedResolutionHours?.estimatedHours,
-    timeline: [{ status: 'submitted', message: 'Complaint submitted successfully', updatedBy: req.user._id }]
+    timeline: [
+      { status: 'submitted', message: 'Complaint submitted successfully', updatedBy: req.user._id }
+    ]
   });
 
   // viaSocket Webhook: Notify that a new complaint was created
@@ -108,104 +125,63 @@ exports.submitComplaint = asyncHandler(async (req, res) => {
     });
   }
 
-  // --- Skill-based Auto Assignment ---
-  if (dept) {
-    const availableOfficers = await User.find({
-      department: dept._id,
-      role: 'employee',
-      isActive: true,
-      $expr: { $lt: ['$activeComplaints', '$bandwidth'] }
-    });
-
-    if (availableOfficers.length > 0) {
-      let bestOfficer = null;
-      let bestScore = Infinity;
-
-      for (const officer of availableOfficers) {
-        const catStats = officer.stats.categorySkills?.get(ai.category);
-        const speedScore = catStats?.avgResolutionHours || officer.stats.avgResolutionHours || 24;
-        const loadFactor = 1 + (officer.activeComplaints / officer.bandwidth); 
-        const finalScore = speedScore * loadFactor;
-
-        if (finalScore < bestScore) {
-          bestScore = finalScore;
-          bestOfficer = officer;
-        }
-      }
-
-      if (bestOfficer) {
-        await User.findByIdAndUpdate(bestOfficer._id, { $inc: { activeComplaints: 1, 'stats.totalAssigned': 1 } });
-        complaint.assignedTo = bestOfficer._id;
-        complaint.assignedAt = new Date();
-        complaint.status = 'assigned';
-        complaint.timeline.push({ status: 'assigned', message: `Auto-assigned to ${bestOfficer.name} based on skill metrics`, isAutomatic: true, updatedBy: null });
-        
-        await notify(req.io, {
-          recipientId: bestOfficer._id,
-          type: 'new_assignment',
-          title: 'New Complaint Auto-Assigned',
-          message: `${complaint.ticketId}: ${complaint.title}`,
-          complaintId: complaint._id
-        });
-      }
-    }
-  }
-
   await complaint.save();
+
 
   // Run Agentic AI Coordination Analysis
   const agenticResult = await analyzeComplaintAgentically(complaint._id);
-  // Re-fetch to avoid overwriting agenticPlan saved by the coordinator
+  // Re-fetch to get the updated status and plan from the coordinator
   const freshComplaint = await Complaint.findById(complaint._id);
+
   if (agenticResult && agenticResult.isComplex) {
-    if (agenticResult.humanInterventionRequired) {
-      const officials = await User.find({ role: { $in: ['cm', 'super_admin'] }, isActive: true, $or: [{ state: null }, { state: userState }] }).select('_id');
-      await notifyMany(req.io, officials.map((o) => o._id), {
-        type: 'agentic_escalation',
-        title: '🤖 Agentic AI Escalation',
-        message: `Human intervention required for: ${agenticResult.ticketId}`,
-        complaintId: agenticResult._id
-      });
-    } else {
-      freshComplaint.timeline.push({ status: 'in_progress', message: 'Agentic AI generated a multi-department resolution plan.', isAutomatic: true, updatedBy: null });
-      await freshComplaint.save();
-    }
-    // Use freshComplaint for all subsequent operations
+    // The agenticCoordinator already created a HITL request and set status to 'pending_hitl_approval'.
+    // Assignments and notifications will be handled by hitlController upon human approval.
     complaint = freshComplaint;
-
-    // --- Notify ALL department officers & heads involved in the agentic plan ---
-    const involvedDeptIds = [...new Set(
-      (complaint.agenticPlan || [])
-        .map(t => t.department?.toString())
-        .filter(Boolean)
-    )];
-    
-    if (involvedDeptIds.length > 0) {
-      // Find department heads and employees in ALL involved departments
-      const deptStaff = await User.find({
-        department: { $in: involvedDeptIds },
-        role: { $in: ['employee', 'department_head'] },
+  } else {
+    // --- Simple Complaint: Skill-based Auto Assignment ---
+    if (dept) {
+      const availableOfficers = await User.find({
+        department: dept._id,
+        role: 'employee',
         isActive: true,
-        state: userState
-      }).select('_id role department');
+        $expr: { $lt: ['$activeComplaints', '$bandwidth'] }
+      });
 
-      // Send personalized notification to each staff member
-      for (const staff of deptStaff) {
-        // Find which task(s) belong to this staff's department
-        const theirTasks = complaint.agenticPlan.filter(
-          t => t.department?.toString() === staff.department?.toString()
-        );
-        const taskDescriptions = theirTasks.map(t => t.taskDescription).join('; ');
+      if (availableOfficers.length > 0) {
+        let bestOfficer = null;
+        let bestScore = Infinity;
 
-        await notify(req.io, {
-          recipientId: staff._id,
-          type: 'agentic_task_assigned',
-          title: '🤖 New Agentic AI Task For Your Department',
-          message: `${complaint.ticketId}: ${taskDescriptions}`,
-          complaintId: complaint._id
-        });
+        for (const officer of availableOfficers) {
+          const catStats = officer.stats.categorySkills?.get(ai.category);
+          const speedScore = catStats?.avgResolutionHours || officer.stats.avgResolutionHours || 24;
+          const loadFactor = 1 + (officer.activeComplaints / officer.bandwidth); 
+          const finalScore = speedScore * loadFactor;
+
+          if (finalScore < bestScore) {
+            bestScore = finalScore;
+            bestOfficer = officer;
+          }
+        }
+
+        if (bestOfficer) {
+          await User.findByIdAndUpdate(bestOfficer._id, { $inc: { activeComplaints: 1, 'stats.totalAssigned': 1 } });
+          freshComplaint.assignedTo = bestOfficer._id;
+          freshComplaint.assignedAt = new Date();
+          freshComplaint.status = 'assigned';
+          freshComplaint.timeline.push({ status: 'assigned', message: `Auto-assigned to ${bestOfficer.name} based on skill metrics`, isAutomatic: true, updatedBy: null });
+          
+          await notify(req.io, {
+            recipientId: bestOfficer._id,
+            type: 'new_assignment',
+            title: 'New Complaint Auto-Assigned',
+            message: `${freshComplaint.ticketId}: ${freshComplaint.title}`,
+            complaintId: freshComplaint._id
+          });
+        }
       }
     }
+    await freshComplaint.save();
+    complaint = freshComplaint;
   }
 
   // Real-time + persisted notifications to CM/admins for critical complaints

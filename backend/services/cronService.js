@@ -48,6 +48,7 @@ async function sendPeriodicReports(periodType, days) {
   
   // Get all users who should receive reports
   const users = await User.find({ isActive: true, role: { $in: ['super_admin', 'cm', 'department_head', 'employee'] } }).populate('department');
+  const emailsToSend = [];
   
   for (const user of users) {
     if (!user.email) continue;
@@ -125,15 +126,37 @@ async function sendPeriodicReports(periodType, days) {
         </div>
       `;
       
-      // Use the raw transporter from emailService. Wait, I need to export the raw sendEmail function from emailService.js
-      const { sendEmail } = require('./emailService');
-      await sendEmail(user.email, subject, html);
+      emailsToSend.push({
+        to: user.email,
+        subject,
+        html
+      });
       
     } catch (err) {
       console.error(`Failed to generate report for ${user.email}:`, err);
     }
   }
-  console.log(`[CRON] ${periodType} report generation complete.`);
+
+  // HITL GATE: PAUSE HERE
+  if (emailsToSend.length > 0) {
+    const HitlRequest = require('../models/HitlRequest');
+    await HitlRequest.create({
+      type: 'MASS_EMAIL',
+      contextData: { periodType, totalEmails: emailsToSend.length },
+      proposedAction: emailsToSend,
+      status: 'pending'
+    });
+    console.log(`[CRON] ${periodType} report generated. Sent to HITL Queue for approval (${emailsToSend.length} emails).`);
+  } else {
+    console.log(`[CRON] ${periodType} report generation complete. No emails to send.`);
+  }
+}
+
+async function sendApprovedMassEmails(emailsToSend) {
+  const { sendEmail } = require('./emailService');
+  for (const email of emailsToSend) {
+    await sendEmail(email.to, email.subject, email.html).catch(e => console.error(e));
+  }
 }
 
 function initCronJobs() {
@@ -155,4 +178,4 @@ function initCronJobs() {
   });
 }
 
-module.exports = { initCronJobs, sendPeriodicReports };
+module.exports = { initCronJobs, sendPeriodicReports, sendApprovedMassEmails };

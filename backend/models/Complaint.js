@@ -43,7 +43,7 @@ const complaintSchema = new mongoose.Schema({
 
   status: {
     type: String,
-    enum: ['submitted', 'under_review', 'assigned', 'in_progress', 'pending_verification', 'resolved', 'reopened', 'rejected', 'escalated'],
+    enum: ['submitted', 'under_review', 'assigned', 'in_progress', 'pending_verification', 'resolved', 'reopened', 'rejected', 'escalated', 'pending_hitl_approval'],
     default: 'submitted'
   },
 
@@ -63,6 +63,8 @@ const complaintSchema = new mongoose.Schema({
   assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 
   images: [String],
+  isFake: { type: Boolean, default: false },
+  fakeReason: { type: String },
   resolutionImages: [String],
   resolutionNote: { type: String },
 

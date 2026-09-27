@@ -36,7 +36,7 @@ export const formatStatus = (status) => STATUS_LABELS[status] || status?.replace
 export const formatCategory = (cat) => CATEGORY_LABELS[cat] || cat?.replace(/_/g, ' ');
 
 export const getErrorMessage = (err, fallback = 'Something went wrong') =>
-  err?.response?.data?.message || fallback;
+  err?.response?.data?.error || err?.response?.data?.message || fallback;
 
 /**
  * Exports an array of objects to a downloadable CSV file.

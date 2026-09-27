@@ -147,5 +147,7 @@ router.get('/mcd311/status', protect, async (req, res) => {
   const available = await isApiAvailable();
   res.json({ success: true, mcd311Available: available, mode: available ? 'live' : 'mock' });
 });
+// ---------- HITL ----------
+router.use('/hitl', require('./hitlRoutes'));
 
 module.exports = router;

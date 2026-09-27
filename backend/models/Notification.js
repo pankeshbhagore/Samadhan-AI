@@ -39,3 +39,5 @@ module.exports = mongoose.model('Notification', notificationSchema);
 // Trigger nodemon reload for Subtask Proof of Work
 
 // Trigger nodemon reload for Agentic Coordinator Assignment Mismatch
+
+// Trigger nodemon reload for escalated status update
