@@ -13,11 +13,17 @@ const { AppError, asyncHandler } = require('../middleware/errorHandler');
 const { getStateFilter } = require('../middleware/stateFilter');
 const { triggerViaSocketWorkflow } = require('../utils/viasocket');
 const { detectFakeEvidence } = require('../services/aiVisionService');
+const { translateToEnglish } = require('../services/aiTranslationService');
 
 // ---- Submit new complaint ----
 exports.submitComplaint = asyncHandler(async (req, res) => {
-  const { title, description, address, ward, district, pincode, landmark, coordinates, source, socialMediaRef } = req.body;
+  let { title, description, address, ward, district, pincode, landmark, coordinates, source, socialMediaRef } = req.body;
   const images = req.files?.map((f) => `/uploads/${f.filename}`) || [];
+  
+  // 0. AI Auto-Translation (Translates Hindi/Regional to English)
+  const translated = await translateToEnglish(title, description);
+  title = translated.title;
+  description = translated.description;
   
   // 1. Image Verification (AI Vision)
   if (req.files && req.files.length > 0) {

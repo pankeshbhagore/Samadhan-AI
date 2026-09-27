@@ -219,6 +219,11 @@ export default function Layout() {
           <button className="btn btn-icon" onClick={() => setSidebarOpen(!sidebarOpen)} style={{ display: 'none' }} id="mob-menu">
             <Menu size={20} />
           </button>
+          
+          {(!user || user?.role === 'citizen') && (
+            <div id="google_translate_element" style={{ marginLeft: 16 }}></div>
+          )}
+
           <div style={{ flex: 1 }} />
 
           <button className="kbd-chip" onClick={openCommandPalette} id="quick-search-chip" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
